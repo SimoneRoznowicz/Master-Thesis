@@ -1,4 +1,7 @@
 mod communication;
+mod PoS;
+mod block_generation;
+
 
 extern crate log;
 extern crate env_logger;
@@ -8,7 +11,6 @@ use std::thread;
 use std::time::Duration;
 use crate::communication::client::start_client;
 use crate::communication::server::start_server;
-
 
 /*
 * Possible logger levels are: Error, Warn, Info, Debug, Trace

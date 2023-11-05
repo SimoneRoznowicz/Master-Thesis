@@ -12,8 +12,7 @@ use aes::cipher::{
     generic_array::GenericArray,
 };
 
-use crate::blockgen::{INIT_SIZE, InitGroup, N, GROUP_SIZE, GROUP_BYTE_SIZE, block_gen};
-
+use crate::block_generation::blockgen::{INIT_SIZE, InitGroup, N, GROUP_SIZE, GROUP_BYTE_SIZE, block_gen};
 type Aes128Cbc = cbc::Encryptor<Aes128>;
 
 const ID_PUBLIC_KEY: &[u8] = b"727 is a funny number";

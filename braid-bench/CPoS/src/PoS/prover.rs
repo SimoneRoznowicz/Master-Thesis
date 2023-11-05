@@ -1,24 +1,27 @@
+use aes::Block;
 
+use crate::communication::{client::start_client, server::start_server, structs::Phase};
+use crate::block_generation::blockgen;
 
-
+use super::verifier;
 
 struct Prover {
-    id: u64,
+    verifier_address: String,
+    list_pos: Vec<Block>
 }
 
 impl Prover {
-    fn new() -> Prover {
-        MyStruct { id: 0 }
+    fn new(verifier_address: String, list_pos: Vec<Block>) -> Prover {
+        start_server(false);
+        return Prover { verifier_address, list_pos};
     }
-    fn get_id(&self) -> u64 {
-        self.id
+
+    fn init(&self) {
+        // assume  the verifier has the public key already
+
     }
-}
-
-fn init() {
     
-}
-
-fn execute(){
-    
+    fn execute(){
+        
+    }
 }
