@@ -7,18 +7,14 @@ use crate::PoS::structs::NodeType;
 use super::client::start_client;
 
 
-pub fn handle_challenge(msg_split: &Vec<&str>, stream: &TcpStream) {
+pub fn handle_verification(msg_split: &Vec<&str>, stream: &TcpStream) {
     let mut block_id = str_to_u64(*msg_split.get(1).unwrap());
     let mut init_position = str_to_u64(*msg_split.get(2).unwrap());
     let num_iterations = *msg_split.get(4).unwrap();
     let num_block_per_unit = str_to_u64("10");  //THIS IS TO BE TAKEN FROM THE BLOCK. 10 IS FAKE
     for mut iteration_c in 0..str_to_u64(num_iterations){
         (block_id, init_position) = random_path_generator(block_id, iteration_c, init_position, num_block_per_unit);
-
     }
-    let peer_addr = stream.peer_addr().unwrap().to_string();
-    let msg = String::from("messaggio");
-    start_client( &peer_addr, &msg)
 }
 
 fn str_to_u64(s: &str) -> u64 {

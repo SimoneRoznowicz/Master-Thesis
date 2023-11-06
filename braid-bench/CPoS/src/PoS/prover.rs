@@ -3,6 +3,7 @@ use aes::Block;
 use crate::communication::{client::start_client, server::start_server, structs::Phase};
 use crate::block_generation::blockgen;
 
+use super::structs::Node;
 use super::verifier;
 
 struct Prover {
