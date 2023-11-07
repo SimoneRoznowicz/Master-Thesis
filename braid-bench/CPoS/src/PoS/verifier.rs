@@ -2,14 +2,14 @@ use crate::communication::{client::start_client, server::start_server, structs::
 
 
 pub struct Verifier {
+    address: String,
     client_address: String,
-    phase: Phase
 }
 
 impl Verifier {
-    fn new(destination_address: String, phase_verifier: Phase) -> Verifier {
-        start_server(true);
-        return Verifier { client_address: destination_address, phase: phase_verifier }
+    fn new(address: String, client_address: String) -> Verifier {
+        start_server(true, address.clone());
+        return Verifier {address, client_address}
     }
 
     //the verifier sends a challenge composed of a seed σ, a proof of space id π, and a given byte position β.

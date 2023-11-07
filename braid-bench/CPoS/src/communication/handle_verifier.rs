@@ -3,9 +3,7 @@ use std::hash::{Hash, Hasher};
 use std::net::TcpStream;
 
 use crate::PoS::structs::NodeType;
-
 use super::client::start_client;
-
 
 pub fn handle_verification(msg_split: &Vec<&str>, stream: &TcpStream) {
     let mut block_id = str_to_u64(*msg_split.get(1).unwrap());

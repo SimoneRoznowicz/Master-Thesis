@@ -6,23 +6,24 @@ use crate::block_generation::blockgen;
 use super::structs::Node;
 use super::verifier;
 
-struct Prover {
+pub struct Prover {
+    address: String,
     verifier_address: String,
-    list_pos: Vec<Block>
+    //list_pos: Vec<Block>
 }
 
 impl Prover {
-    fn new(verifier_address: String, list_pos: Vec<Block>) -> Prover {
-        start_server(false);
-        return Prover { verifier_address, list_pos};
+    pub fn new(address: String, verifier_address: String/*, list_pos: Vec<Block>*/) -> Prover {
+        start_server(false, address.clone());
+        return Prover { address, verifier_address};
     }
 
-    fn init(&self) {
+    pub fn init(&self) {
         // assume  the verifier has the public key already
 
     }
     
-    fn execute(){
+    pub fn execute(){
         
     }
 }

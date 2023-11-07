@@ -10,11 +10,9 @@ extern crate log;
 extern crate env_logger;
 use log::{info, error, warn};
 
-pub fn start_server(isVerifier: bool) {
+pub fn start_server(isVerifier: bool, address: String) {
     
-    let host = String::from("127.0.0.1");
-    let port = String::from("3333");
-    let address = format!("{}:{}", host, port);
+
     info!("Server listening on address {}", address);
 
     // accept connections and process them, spawning a new thread for each one
@@ -53,9 +51,9 @@ pub fn handle_stream(isVerifier: bool, stream: &mut TcpStream) {
                     handle_message(isVerifier, received_string, &stream);
                 },
                 Err(e) => {
-                    eprintln!("Error reading from the stream: {}", e);
+                    println!("Error reading from the stream: {}", e);
                 }
-            }        
+            }
             stream.write(&data[0..size]).unwrap();
             true
         },
