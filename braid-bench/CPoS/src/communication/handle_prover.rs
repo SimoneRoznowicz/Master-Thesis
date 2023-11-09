@@ -14,7 +14,7 @@ pub fn handle_challenge(msg_split: &Vec<&str>, stream: &TcpStream) {
     let num_block_per_unit = str_to_u64("10");  //THIS IS TO BE TAKEN FROM THE BLOCK. 10 IS FAKE
     for mut iteration_c in 0..str_to_u64(num_iterations){
         (block_id, init_position) = random_path_generator(block_id, iteration_c, init_position, num_block_per_unit);
-
+        //add to buffer
     }
     let peer_addr = stream.peer_addr().unwrap().to_string();
     let msg = String::from("messaggio");
@@ -28,8 +28,9 @@ fn str_to_u64(s: &str) -> u64 {
     }
 }
 
+// try not to generate every time
 pub fn random_path_generator(id: u64, c: u64, p: u64, num_block_per_unit: u64) -> (u64,u64) {
-    let num_fragments_per_block = "100";    //TEMPORARY VALUE: TO RETRIEVE FROM THE BLOCK GENERATOR
+    let num_fragments_per_block = "100";    //(considering fragments of 1 byte) TEMPORARY VALUE: TO RETRIEVE FROM THE BLOCK GENERATOR
 
     let mut hasher_nxt_block = DefaultHasher::new();
     let mut hasher_nxt_pos = DefaultHasher::new();
@@ -39,14 +40,15 @@ pub fn random_path_generator(id: u64, c: u64, p: u64, num_block_per_unit: u64) -
     id.hash(&mut hasher_nxt_block);
     c.hash(&mut hasher_nxt_block);
     p.hash(&mut hasher_nxt_block);
+
     let new_id = hasher_nxt_block.finish() % num_block_per_unit;
-
-    id.hash(&mut hasher_nxt_pos);
-    c.hash(&mut hasher_nxt_pos);
-    p.hash(&mut hasher_nxt_pos);
-    f.hash(&mut hasher_nxt_pos);
-
     let new_p = hasher_nxt_pos.finish() % f;
+    // id.hash(&mut hasher_nxt_pos);
+    // c.hash(&mut hasher_nxt_pos);
+    // p.hash(&mut hasher_nxt_pos);
+    // f.hash(&mut hasher_nxt_pos);
+
+    
     return (new_id, new_p);
 }
 
