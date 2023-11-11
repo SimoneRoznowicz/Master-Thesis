@@ -5,7 +5,7 @@ pub enum Phase {
     Verify,
 }
 
-pub enum Notification {
+pub enum Signal {
     Continue,
     Stop,
 }

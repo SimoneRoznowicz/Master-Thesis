@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 use crate::communication::handle_prover;
 use crate::communication::handle_verifier;
 use crate::PoS::structs::NodeType;
-use crate::communication::structs::Notification;
+use crate::communication::structs::Signal;
 use std::sync::mpsc::{self, Sender, Receiver};
 
 
@@ -54,8 +54,8 @@ pub fn handle_stream(isVerifier: bool, stream: &mut TcpStream) {
 
 pub fn handle_message(isVerifier: bool, msg: &[u8], stream: &TcpStream) {
     let tag = msg[0];
-    let sender: Sender<Notification>;
-    let receiver: Receiver<Notification>;
+    let sender: Sender<Signal>;
+    let receiver: Receiver<Signal>;
     (sender,receiver) = mpsc::channel();
     if (isVerifier){    //I am a Verifier
         if(tag == 1){
