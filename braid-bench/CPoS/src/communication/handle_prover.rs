@@ -7,31 +7,47 @@ use crate::block_generation::blockgen::SIZE;
 use crate::block_generation::utils;
 use crate::PoS::structs::NodeType;
 use super::client::{start_client, self};
-use crate::block_generation::utils::Utils::{BATCH_SIZE,num_block_per_unit,num_fragments_per_block,num_iterations};
+use crate::block_generation::utils::Utils::{BATCH_SIZE,num_block_per_unit,num_fragments_per_block,num_iterations,MAX_NUM_PROOFS};
 use crate::communication::structs::Notification;
 
 
 pub fn handle_challenge(msg: &[u8], stream: &TcpStream, receiver: mpsc::Receiver<Notification>) {
     let mut block_id: u32 = 1;  // Given parameter
     let mut init_position: u32 = 1;  //Given parameter
-    while let Ok(nofication) = receiver.recv() {  //PROBLEMA: QUA SI FERMA SEMPRE. MI SERVIREBBE UNA NOTIFICA CONTINUE A OGNI CICLO. INVECE IO VORREI UNA NOTIFICA STOP QUANDO SERVE E NEL RESTO DEL TEMPO RIMANE CONTINUE
-        match nofication {
-            Notification::Continue => {
-                let seed = msg[1];
-                let proof_batch: [u8;BATCH_SIZE] = [0;BATCH_SIZE];
-                for mut iteration_c in 0..proof_batch.len() {
-                    (block_id, init_position) = random_path_generator(block_id, iteration_c, init_position, seed);
-                    //proof_buffer[iteration_c] = 
-                }
-                let peer_addr = stream.peer_addr().unwrap().to_string(); 
-        
-                let mut response_msg: [u8; BATCH_SIZE] = [1; BATCH_SIZE];
-                response_msg[1..].copy_from_slice(&proof_batch);
-                let my_slice: &[u8] = &response_msg;
+    let mut counter = 0;
+    while counter<MAX_NUM_PROOFS {
+        match receiver.try_recv() {  //PROBLEMA: QUA SI FERMA SEMPRE. MI SERVIREBBE UNA NOTIFICA CONTINUE A OGNI CICLO. INVECE IO VORREI UNA NOTIFICA STOP QUANDO SERVE E NEL RESTO DEL TEMPO RIMANE CONTINUE
+            Ok(notification) => {
+                match notification {
+                    Notification::Continue => {
+                        let seed = msg[1];
+                        let proof_batch: [u8;BATCH_SIZE] = [0;BATCH_SIZE];
+                        for mut iteration_c in 0..proof_batch.len() {
+                            (block_id, init_position) = random_path_generator(block_id, iteration_c, init_position, seed);
+                            //proof_buffer[iteration_c] = 
+                        }
+                        let peer_addr = stream.peer_addr().unwrap().to_string(); 
                 
-                start_client(&peer_addr, &response_msg);
+                        let mut response_msg: [u8; BATCH_SIZE] = [1; BATCH_SIZE];
+                        response_msg[1..].copy_from_slice(&proof_batch);
+                        let my_slice: &[u8] = &response_msg;
+                        
+                        start_client(&peer_addr, &response_msg);
+                    }
+                    Notification::Stop => {
+                        break;
+                    }
+                }
             }
-            Notification::Stop => {
+            Err(mpsc::TryRecvError::Empty) => {
+
+            }
+            Err(mpsc::TryRecvError::Disconnected) => {
+                // The sender has been disconnected, exit the loop
+                break;
+            }
+            Err(_) => {
+                // The sender has been disconnected, exit the loop
                 break;
             }
         }
