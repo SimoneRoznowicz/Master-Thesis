@@ -1,3 +1,6 @@
+use std::str::Bytes;
+use rand::Rng;
+
 use crate::communication::{client::start_client, server::start_server, structs::Phase};
 
 
@@ -14,17 +17,20 @@ impl Verifier {
 
     //the verifier sends a challenge composed of a seed σ, a proof of space id π, and a given byte position β.
     fn challenge(&self) {
-        let phase_id = String::from ("CHALLENGE");   
+        let phase_id = String::from ("CHALLENGE");
         let separator = String::from(":");
         let block_id: u64 = 1;
         let init_position: u64 = 1;
         let seed = String::from("random_seed"); //to make random every call
         //eg. CHALLENGE:1:1:this_is_a_random_seed
-        let msg = phase_id + &separator + &block_id.to_string() + &separator + &init_position.to_string() + &seed;  
+        //tag is array[0].           tag == 0 -> CHALLENGE      tag == 1 -> VERIFICATION
+        let tag: u8 = 0; 
+        let seed: u8 = rand::thread_rng().gen_range(0..=255);
+        let msg: [u8; 2] = [tag,seed];
         //send challenge to prover for the execution
         start_client(&self.client_address, &msg);
     }
-    
+
     //get a stream of bytes as input. Recompute all the blocks in order. Check if each byte is correct according to the computed block 
     fn verify() -> bool{
         return true;

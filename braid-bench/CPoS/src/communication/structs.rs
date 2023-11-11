@@ -4,3 +4,8 @@ pub enum Phase {
     Execute,
     Verify,
 }
+
+pub enum Notification {
+    Continue,
+    Stop,
+}
