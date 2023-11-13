@@ -2,46 +2,45 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::net::TcpStream;
 
+use aes::Block;
+use rand::seq::SliceRandom;
+
 use crate::PoS::structs::NodeType;
 use super::client::start_client;
+use crate::block_generation::utils::Utils::NUM_PROOFS_TO_VERIFY;
+//use rand::seq::SliceRandom;
 
-pub fn handle_verification(msg: &Vec<&str>, stream: &TcpStream) {
-    // let mut block_id = str_to_u64(*msg.get(1).unwrap());
-    // let mut init_position = str_to_u64(*msg.get(2).unwrap());
-    // let num_iterations = *msg.get(4).unwrap();
-    // let num_block_per_unit = str_to_u64("10");  //THIS IS TO BE TAKEN FROM THE BLOCK. 10 IS FAKE
-    // for mut iteration_c in 0..str_to_u64(num_iterations){
-    //     (block_id, init_position) = random_path_generator(block_id, iteration_c, init_position, num_block_per_unit);
-    // }
+
+pub fn handle_verification(msg: &[u8], stream: &TcpStream) -> bool {
+    return verify_time_challenge_bound() && verify_proofs(msg, stream); //if the first is wrong, don't execute verify_proofs
 }
 
-// fn str_to_u64(s: &str) -> u64 {
-//     match s.parse() {
-//         Ok(s) => s,
-//         Err(_) => panic!(),
-//     }
-// }
+pub fn verify_time_challenge_bound() -> bool {
+    return true;
+}
 
-// pub fn random_path_generator(id: u64, c: u64, p: u64, num_block_per_unit: u64) -> (u64,u64) {
-//     let num_fragments_per_block = "100";    //TEMPORARY VALUE: TO RETRIEVE FROM THE BLOCK GENERATOR
+pub fn verify_proofs(msg: &[u8], stream: &TcpStream) -> bool {
+    let proof_batch = msg[1..].to_vec();
+    if NUM_PROOFS_TO_VERIFY > msg.len().try_into().unwrap() {
+        //NUM_PROOFS_TO_VERIFY = msg.len().try_into().unwrap();
+    }
 
-//     let mut hasher_nxt_block = DefaultHasher::new();
-//     let mut hasher_nxt_pos = DefaultHasher::new();
+    let mut rng = rand::thread_rng();
+    // let mut shuffled_elements = msg.clone();
+    let mut shuffled_elements: Vec<u8> = msg.clone().to_vec();
+    shuffled_elements.shuffle(&mut rng);
 
-//     let f =  str_to_u64(num_fragments_per_block);
+    for mut i in 0..NUM_PROOFS_TO_VERIFY {
+        if(!sample_generate_verify(msg,stream,i)){
+            return false;
+        };
+    }
+    return true;
+}
 
-//     id.hash(&mut hasher_nxt_block);
-//     c.hash(&mut hasher_nxt_block);
-//     p.hash(&mut hasher_nxt_block);
-//     let new_id = hasher_nxt_block.finish() % num_block_per_unit;
-
-//     id.hash(&mut hasher_nxt_pos);
-//     c.hash(&mut hasher_nxt_pos);
-//     p.hash(&mut hasher_nxt_pos);
-//     f.hash(&mut hasher_nxt_pos);
-
-//     let new_p = hasher_nxt_pos.finish() % f;
-//     return (new_id, new_p);
-// }
-
+pub fn sample_generate_verify(msg: &[u8], stream: &TcpStream, i: u32) -> bool {
+    //generate_block();
+    //verify_proof();
+    return false;
+}
 

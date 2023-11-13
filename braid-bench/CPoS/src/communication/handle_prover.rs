@@ -9,9 +9,8 @@ use crate::block_generation::blockgen::SIZE;
 use crate::block_generation::utils;
 use crate::PoS::structs::NodeType;
 use super::client::{start_client, self};
-use crate::block_generation::utils::Utils::{BATCH_SIZE,num_block_per_unit,num_fragments_per_block,MAX_NUM_PROOFS,initial_block_id,initial_position};
+use crate::block_generation::utils::Utils::{BATCH_SIZE,NUM_BLOCK_PER_UNIT,NUM_FRAGMENTS_PER_UNIT,MAX_NUM_PROOFS,INITIAL_BLOCK_ID,INITIAL_POSITION};
 use crate::communication::structs::Signal;
-
 
 pub fn handle_challenge(msg: &[u8], stream: &TcpStream, receiver: mpsc::Receiver<Signal>) {
     let mut counter = 0;
@@ -41,8 +40,8 @@ pub fn handle_challenge(msg: &[u8], stream: &TcpStream, receiver: mpsc::Receiver
 }
 
 pub fn create_and_send_proof_batches(msg: &[u8], stream: &TcpStream, receiver: &mpsc::Receiver<Signal>) {
-    let mut block_id: u32 = initial_block_id;  // Given parameter
-    let mut position: u32 = initial_position;  //Given parameter
+    let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
+    let mut position: u32 = INITIAL_POSITION;  //Given parameter
     let seed = msg[1];
     let proof_batch: [u8;BATCH_SIZE] = [0;BATCH_SIZE];
     for mut iteration_c in 0..proof_batch.len() {
@@ -57,12 +56,10 @@ pub fn create_and_send_proof_batches(msg: &[u8], stream: &TcpStream, receiver: &
     
     start_client(&peer_addr, &response_msg);
     info!("Batch of proofs sent to the verifier");
-
 }
 
 // Try not to generate every time
 pub fn random_path_generator(id: u32, c: usize, p: u32, s: u8) -> (u32,u32) {
-
     let mut hasher_nxt_block = DefaultHasher::new();
     let mut hasher_nxt_pos = DefaultHasher::new();
 
@@ -71,14 +68,14 @@ pub fn random_path_generator(id: u32, c: usize, p: u32, s: u8) -> (u32,u32) {
     id.hash(&mut hasher_nxt_block);
     c.hash(&mut hasher_nxt_block);
     p.hash(&mut hasher_nxt_block);
-    let new_id = hasher_nxt_block.finish() % num_block_per_unit as u64;
+    let new_id = hasher_nxt_block.finish() % NUM_BLOCK_PER_UNIT as u64;
 
     s.hash(&mut hasher_nxt_pos);
     id.hash(&mut hasher_nxt_pos);
     c.hash(&mut hasher_nxt_pos);
     p.hash(&mut hasher_nxt_pos);
-    num_fragments_per_block.hash(&mut hasher_nxt_pos);
-    let new_p = hasher_nxt_pos.finish() % num_fragments_per_block as u64;
+    NUM_FRAGMENTS_PER_UNIT.hash(&mut hasher_nxt_pos);
+    let new_p = hasher_nxt_pos.finish() % NUM_FRAGMENTS_PER_UNIT as u64;
 
     return (new_id.try_into().unwrap(), new_p.try_into().unwrap());
 }

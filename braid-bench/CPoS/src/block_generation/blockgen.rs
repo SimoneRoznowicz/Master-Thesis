@@ -23,7 +23,9 @@ pub type BlockGroup = Vec<FragmentGroup>;
 pub const INIT_SIZE_EXP: usize = 2;
 pub const INIT_SIZE: usize = 1 << INIT_SIZE_EXP; // 4x64bit = 256bit
 pub const INIT_MASK: usize = INIT_SIZE - 1;
-pub type InitGroup = [FragmentGroup; INIT_SIZE];
+pub type InitGroup = [FragmentGroup; INIT_SIZE];  //array of 4 elements: each element is an array of 4 u64 (8*4bytes) elements
+//eg. InitGroup = [[1,2,3,4],[1,2,3,4],[1,2,3,4],[1,2,3,4]]
+
 
 pub fn block_gen(inits: InitGroup) -> BlockGroup {
     if is_x86_feature_detected!("avx2") {

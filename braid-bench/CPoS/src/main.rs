@@ -27,6 +27,9 @@ fn main() {
     // let data: [u8, 5]= [255, 1, 7];
     let data: [u8; 3] = [255, 20, 30];
 
+    let pub_hash = blake3::hash(b"HELLO");
+
+
     let tag = data[0];
     let second_cell = data[1];
     let num_fragments_per_block = 1000;
