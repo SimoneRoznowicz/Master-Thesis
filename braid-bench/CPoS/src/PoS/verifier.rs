@@ -1,18 +1,23 @@
 use std::str::Bytes;
 use rand::Rng;
 
-use crate::communication::{client::start_client, server::start_server, structs::Phase};
+use crate::communication::{client::start_client,structs::Phase};
 
 
 pub struct Verifier {
     address: String,
     client_address: String,
+    seed: u8
 }
 
 impl Verifier {
     fn new(address: String, client_address: String) -> Verifier {
-        start_server(true, address.clone());
-        return Verifier {address, client_address}
+        let seed: u8 = rand::thread_rng().gen();
+        return Verifier {address, client_address, seed}
+    }
+
+    fn start_verifier(&self){
+        //start_server(true, self.address.clone());
     }
 
     //the verifier sends a challenge composed of a seed σ, a proof of space id π, and a given byte position β.

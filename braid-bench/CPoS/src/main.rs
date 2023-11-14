@@ -11,7 +11,7 @@ use log::{info, error};
 use std::thread;
 use std::time::Duration;
 use crate::communication::client::start_client;
-use crate::communication::server::start_server;
+//use crate::communication::server::start_server;
 use crate::PoS::prover::Prover;
 
 /*
@@ -28,6 +28,7 @@ fn main() {
     let data: [u8; 3] = [255, 20, 30];
 
     let pub_hash = blake3::hash(b"HELLO");
+    
 
 
     let tag = data[0];
