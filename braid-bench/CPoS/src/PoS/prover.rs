@@ -1,5 +1,6 @@
 use std::io::Read;
 use std::net::{TcpListener, Shutdown, TcpStream};
+use std::sync::{Arc, Mutex, RwLock};
 use std::sync::mpsc::{Sender, self};
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::channel;
@@ -17,6 +18,7 @@ use crate::block_generation::blockgen;
 use super::structs::Node;
 use super::verifier;
 
+#[derive(Debug,Clone)]
 pub struct Prover {
     address: String,
     verifier_address: String,
@@ -25,8 +27,19 @@ pub struct Prover {
 
 impl Prover {
     pub fn new(address: String, verifier_address: String/*, list_pos: Vec<Block>*/) -> Prover {
+        let this = Self {
+            address,
+            verifier_address,
+        };
         
-        return Prover { address, verifier_address};
+        let builder = thread::Builder::new().name("JOB_EXECUTOR".into());
+
+        builder.spawn({
+            let this = this.clone();
+            move || this.listen()
+        });
+
+        this
     }
 
     pub fn start_server_verifier(&self){
@@ -44,21 +57,42 @@ impl Prover {
     pub fn start_server(&self) {
         info!("Server listening on address {}", self.address);
         // accept connections and process them, spawning a new thread for each one
-        thread::spawn(|| {
-            self.listen();
-        });
+        self.spawn_listener_thread()
     }
-    
+
+    fn spawn_listener_thread(& self) {
+        // let arc_self = Arc::new(RwLock::new(self));
+
+        // let arc_clone = Arc::clone(&arc_self);
+        // thread::spawn(move || {
+        //     let locked_self = arc_clone.read().unwrap();
+        //     locked_self.listen();
+        // });
+
+
+
+        // let x = Arc::new(Mutex::new(self.clone()));
+        // let alias = x.clone();
+        // { // launch thread asynchronuously...
+        //      // will refer to the same Mutex<Foo>
+        //     thread::spawn(|| {
+        //         let mutref = alias.lock().unwrap(); 
+
+        //         mutref.listen();
+        //     });
+        // }
+    }
+
     pub fn listen(&self) {
-        let listener = TcpListener::bind(self.address).unwrap();
+        let listener = TcpListener::bind(&self.address).unwrap();
         for stream in listener.incoming() {
             match stream {
                 Ok(mut stream) => {
                     info!("New connection: {}", stream.peer_addr().unwrap());
-                    thread::spawn(move || {
-                        let data = self.handle_stream(&mut stream);
-                        self.handle_message(data);
-                    });
+                    let mut data = [0 as u8; 200]; // MODIFIY TO USE THE MINIMUM LENGTH BUFFER
+                    let mut slice = data.as_mut_slice();
+                    let dataa = self.handle_stream(&mut stream, slice);
+                    self.handle_message(dataa);
                 }
                 Err(e) => {
                     error!("Error: {}", e)
@@ -67,11 +101,10 @@ impl Prover {
         }
     }
     
-    pub fn handle_stream(&self, stream: &mut TcpStream) -> &[u8] {
-        let mut data = [0 as u8; 200]; // MODIFIY TO USE THE MINIMUM LENGTH BUFFER
-        match stream.read(&mut data) {
+    pub fn handle_stream<'a>(&self, stream: &mut TcpStream, data: &'a mut [u8]) -> &'a[u8] {
+        match stream.read(data) {
             Ok(size) => {
-                return &data;          
+                return &data[..size];
             },
             Err(_) => {
                 error!("An error occurred, terminating connection with {}", stream.peer_addr().unwrap());
