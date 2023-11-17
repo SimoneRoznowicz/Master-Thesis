@@ -21,9 +21,9 @@ pub fn verify_time_challenge_bound() -> bool {
 
 pub fn verify_proofs(msg: &[u8], stream: &TcpStream) -> bool {
     let proof_batch = msg[1..].to_vec();
-    if NUM_PROOFS_TO_VERIFY > msg.len().try_into().unwrap() {
-        //NUM_PROOFS_TO_VERIFY = msg.len().try_into().unwrap() };
-    }
+    // if NUM_PROOFS_TO_VERIFY > msg.len().try_into().unwrap() {
+    //     //NUM_PROOFS_TO_VERIFY = msg.len().try_into().unwrap() };
+    // }
 
     let mut rng = rand::thread_rng();
     let mut shuffled_elements: Vec<u8> = msg.clone().to_vec();

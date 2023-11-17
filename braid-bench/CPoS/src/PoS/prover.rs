@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::sync::mpsc::{Sender, self};
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::channel;
-use std::thread;
+use std::thread::{self, Thread};
 
 use aes::Block;
 use log::{info, error};
@@ -32,58 +32,26 @@ impl Prover {
             verifier_address,
         };
         
-        let builder = thread::Builder::new().name("JOB_EXECUTOR".into());
-
-        builder.spawn({
+        thread::spawn({
             let this = this.clone();
-            move || this.listen()
+            move || this.start_server()
         });
 
         this
     }
 
-    pub fn start_server_verifier(&self){
 
-    }
     // start_server(false, address.clone());
     pub fn init(&self) {
         //generate block group here        
     }
     
     pub fn execute(){
-
+        
     }
 
     pub fn start_server(&self) {
         info!("Server listening on address {}", self.address);
-        // accept connections and process them, spawning a new thread for each one
-        self.spawn_listener_thread()
-    }
-
-    fn spawn_listener_thread(& self) {
-        // let arc_self = Arc::new(RwLock::new(self));
-
-        // let arc_clone = Arc::clone(&arc_self);
-        // thread::spawn(move || {
-        //     let locked_self = arc_clone.read().unwrap();
-        //     locked_self.listen();
-        // });
-
-
-
-        // let x = Arc::new(Mutex::new(self.clone()));
-        // let alias = x.clone();
-        // { // launch thread asynchronuously...
-        //      // will refer to the same Mutex<Foo>
-        //     thread::spawn(|| {
-        //         let mutref = alias.lock().unwrap(); 
-
-        //         mutref.listen();
-        //     });
-        // }
-    }
-
-    pub fn listen(&self) {
         let listener = TcpListener::bind(&self.address).unwrap();
         for stream in listener.incoming() {
             match stream {
@@ -129,6 +97,7 @@ impl Prover {
             error!("Received wrong round_id: this is a Prover, the round_id is {}", tag)
         }
     }
+
     pub fn handle_challenge(&self, msg: &[u8], receiver: mpsc::Receiver<Signal>) {
         let mut counter = 0;
         while counter < MAX_NUM_PROOFS {
