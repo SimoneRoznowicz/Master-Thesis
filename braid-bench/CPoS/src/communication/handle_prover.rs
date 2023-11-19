@@ -8,7 +8,7 @@ use log::{info,warn,error};
 use crate::block_generation::blockgen::SIZE;
 use crate::block_generation::utils;
 use crate::PoS::structs::NodeType;
-use super::client::{start_client, self};
+use super::client::{self};
 use crate::block_generation::utils::Utils::{BATCH_SIZE,NUM_BLOCK_PER_UNIT,NUM_FRAGMENTS_PER_UNIT,MAX_NUM_PROOFS,INITIAL_BLOCK_ID,INITIAL_POSITION};
 use crate::communication::structs::Signal;
 

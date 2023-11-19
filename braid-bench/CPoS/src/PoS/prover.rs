@@ -1,4 +1,5 @@
-use std::io::Read;
+use std::fs::File;
+use std::io::{Read, Write};
 use std::net::{TcpListener, Shutdown, TcpStream};
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::mpsc::{Sender, self};
@@ -7,51 +8,62 @@ use std::sync::mpsc::channel;
 use std::thread::{self, Thread};
 
 use aes::Block;
-use log::{info, error};
+use log::{info, error, debug};
 
-use crate::block_generation::utils::Utils::{MAX_NUM_PROOFS, BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION};
+use crate::block_generation::encoder::generate_block;
+use crate::block_generation::utils::Utils::{MAX_NUM_PROOFS, BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_PER_UNIT};
+use crate::communication::client::send_msg;
 use crate::communication::handle_prover::random_path_generator;
 use crate::communication::structs::Signal;
-use crate::communication::{client::start_client, structs::Phase};
-use crate::block_generation::blockgen;
+use crate::communication::{structs::Phase};
+use crate::block_generation::blockgen::{self, BlockGroup};
 
 use super::structs::Node;
 use super::verifier;
 
-#[derive(Debug,Clone)]
+#[derive(Debug)]
 pub struct Prover {
     address: String,
     verifier_address: String,
-    //list_pos: Vec<Block>
+    stream: Option<TcpStream>,
+    unit: Vec<BlockGroup>   //maybe then you should substitute this BlockGroup with a File
 }
 
 impl Prover {
-    pub fn new(address: String, verifier_address: String/*, list_pos: Vec<Block>*/) -> Prover {
+    pub fn new(address: String, verifier_address: String) -> Prover {
+        debug!("beginning of new Prover");
+        let mut unit: Vec<BlockGroup> = Vec::new();
+
+        for i in 0..NUM_BLOCK_PER_UNIT {
+            debug!("Before first block generate");
+            unit.push(generate_block(i));
+        }
+        debug!("After block generation");
+        let mut encoded: Vec<u8> = bincode::serialize(&unit).unwrap();
+        let enc_slice: &[u8] = encoded.as_mut_slice();
+        // Write the serialized data to a file
+        let mut file = File::create("serailized_file.bin").unwrap();
+        //file.write_all(&encoded)?;
+        file.write_all(&enc_slice);
+        let mut stream: Option<TcpStream> = None;
         let this = Self {
             address,
             verifier_address,
+            stream,
+            unit
         };
-        
-        thread::spawn({
-            let this = this.clone();
+
+        debug!("Before spawn");
+        let thread = thread::spawn({
+            debug!("inside spawn");
             move || this.start_server()
         });
 
         this
     }
 
-
-    // start_server(false, address.clone());
-    pub fn init(&self) {
-        //generate block group here        
-    }
-    
-    pub fn execute(){
-        
-    }
-
     pub fn start_server(&self) {
-        info!("Server listening on address {}", self.address);
+        info!("Prover server listening on address {}", self.address);
         let listener = TcpListener::bind(&self.address).unwrap();
         for stream in listener.incoming() {
             match stream {
@@ -129,21 +141,26 @@ impl Prover {
         let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
         let mut position: u32 = INITIAL_POSITION;  //Given parameter
         let seed = msg[1];
-        let proof_batch: [u8;BATCH_SIZE] = [0;BATCH_SIZE];
+        let mut proof_batch: [u8;BATCH_SIZE] = [0;BATCH_SIZE];
+        info!("Prepared batch of proofs...");
         for mut iteration_c in 0..proof_batch.len() {
             (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
-            //proof_buffer[iteration_c] = 
+            proof_batch[iteration_c] = read_byte_from_file();
         } 
-        info!("Preparing batch of proofs...");
-        let mut response_msg: [u8; BATCH_SIZE] = [1; BATCH_SIZE];
+        let mut response_msg: [u8; BATCH_SIZE+1] = [1; BATCH_SIZE+1];
         response_msg[1..].copy_from_slice(&proof_batch);
         let my_slice: &[u8] = &response_msg;
         
-        start_client(&self.verifier_address, &response_msg);
-        info!("Batch of proofs sent to the verifier");
+        send_msg(&mut self.stream, &self.verifier_address, &response_msg);
+    
+        info!("Batch of proofs sent from prover at {} to the verifier at address {}",&self.address,&self.verifier_address);
     }
 
     pub fn stop_sending_proofs(&self, sender: mpsc::Sender<Signal>) {
         sender.send(Signal::Stop).unwrap();
     }
+}
+
+pub fn read_byte_from_file() -> u8 {
+    return 0;
 }

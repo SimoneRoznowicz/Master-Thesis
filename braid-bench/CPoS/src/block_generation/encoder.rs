@@ -13,6 +13,8 @@ use aes::cipher::{
 };
 
 use crate::block_generation::blockgen::{INIT_SIZE, InitGroup, N, GROUP_SIZE, GROUP_BYTE_SIZE, block_gen};
+
+use super::blockgen::BlockGroup;
 type Aes128Cbc = cbc::Encryptor<Aes128>;
 
 const ID_PUBLIC_KEY: &[u8] = b"727 is a funny number";
@@ -106,7 +108,7 @@ pub fn encode(mut input_file: File, mut output_file: File) -> io::Result<()> {
     Ok(())
 }
 
-pub fn generate_block(i: u64) {
+pub fn generate_block(i: u64) -> BlockGroup {
     let pub_hash = blake3::hash(ID_PUBLIC_KEY);
 
     let mut inits: InitGroup = [[0; GROUP_SIZE]; INIT_SIZE];
@@ -127,4 +129,6 @@ pub fn generate_block(i: u64) {
             inits[i][g] = u64::from_le_bytes(hash_bytes);
         }
     }
+    
+    return block_gen(inits);
 }
