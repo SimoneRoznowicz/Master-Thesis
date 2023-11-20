@@ -19,7 +19,7 @@ use log::{info,error,warn};
 //     info!("client terminated.");
 // }
 
-pub fn send_msg(stream_option: &mut Option<TcpStream>, address: &String, msg: &[u8]) {
+pub fn send_msg(stream_option: &mut Option<&TcpStream>, msg: &[u8]) {
     match stream_option {
         Some(stream) => {
             match stream.write(msg) {

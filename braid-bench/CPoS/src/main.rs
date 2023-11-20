@@ -38,7 +38,7 @@ fn main() {
     println!("Main");
     let prover = Prover::new(address_prover.clone(), address_verifier.clone());
 
-    let verifier = Verifier::new(address_verifier, address_prover);
+    let mut verifier = Verifier::new(address_verifier, address_prover);
     verifier.challenge();
     thread::sleep(Duration::from_secs(100));
 }
