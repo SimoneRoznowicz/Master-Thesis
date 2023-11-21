@@ -8,7 +8,8 @@ use crate::{communication::{client::{send_msg},structs::{Phase, Signal}, handle_
 pub struct Verifier {
     address: String,
     prover_address: String,
-    seed: u8
+    seed: u8,
+    stream: TcpStream
 }
 
 impl Verifier {
@@ -16,10 +17,17 @@ impl Verifier {
         let seed: u8 = rand::thread_rng().gen();
         //return Verifier {address, prover_address, seed}
         //let mut stream: Option<TcpStream> = None;
+        let stream_option = TcpStream::connect(prover_address.clone());
+        match stream_option {
+            Ok(_) => {info!("Connection from verifier at {} and Prover at {} successfully created", address, prover_address)},
+            Err(_) => {error!("Error in connection")},
+        };
+        let stream = stream_option.unwrap();
         let this = Self {
             address,
             prover_address,
             seed,
+            stream
         };
 
         this
@@ -48,20 +56,16 @@ impl Verifier {
         return verify_time_challenge_bound() && verify_proofs(msg); //if the first is wrong, don't execute verify_proofs
     }
     
-    
-    
-
-
     //the verifier sends a challenge composed of a seed σ, a proof of space id π, and a given byte position β.
     pub fn challenge(&mut self) {
-        error!("Challenge being prepared by the verifier...");
         //tag is array[0].           tag == 0 -> CHALLENGE    tag == 1 -> VERIFICATION    tag == 2 -> STOP (sending proofs)
         let tag: u8 = 0; 
         let seed: u8 = rand::thread_rng().gen_range(0..=255);
         let msg: [u8; 2] = [tag,seed];
         //send challenge to prover for the execution
         info!("Challenge being prepared by the verifier...");
-        self.start_client(&self.prover_address.clone(), &msg);
+        send_msg(&mut self.stream, &msg);
+        //self.start_client(&self.prover_address.clone(), &msg);
     }
 
     //get a stream of bytes as input. Recompute all the blocks in order. Check if each byte is correct according to the computed block 
@@ -70,11 +74,11 @@ impl Verifier {
     }   
 
     pub fn start_client(&mut self, address: &String, msg: &[u8]) {
-        match TcpStream::connect(address) {
+        let stream = TcpStream::connect(address);
+        match stream {
             Ok(mut stream) => {
                 info!("Successfully connected to address: {}", address);
-                let mut option_stream = Some(&stream);
-                send_msg(&mut option_stream, msg);
+                send_msg(&mut stream, msg);
             },
             Err(e) => {
                 error!("Failed to connect: {}", e);

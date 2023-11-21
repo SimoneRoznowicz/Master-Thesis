@@ -38,7 +38,7 @@ fn main() {
     let address_verifier = format!("{}:{}", host_verifier, port_verifier);
 
     println!("Main");
-    let prover = Prover::new(address_prover.clone(), address_verifier.clone());
+    let mut prover = Prover::new(address_prover.clone(), address_verifier.clone());
 
     prover.start_server();
     

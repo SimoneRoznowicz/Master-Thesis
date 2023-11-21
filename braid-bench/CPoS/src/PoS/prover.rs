@@ -57,7 +57,7 @@ impl Prover {
         this
     }
     
-    pub fn start_server(&self) {
+    pub fn start_server(&mut self) {
         info!("Prover server listening on address {}", self.address);
         let listener = TcpListener::bind(&self.address).unwrap();
         thread::spawn(move ||{
@@ -67,7 +67,7 @@ impl Prover {
                         info!("New connection: {}", stream.peer_addr().unwrap());
                         let mut data = [0; 128]; // Use a smaller buffer size
                         let retrieved_data = handle_stream(&mut stream, &mut data);
-                        handle_message(&stream, retrieved_data);
+                        handle_message(&mut stream, retrieved_data);
                     }
                     Err(e) => {
                         error!("Error: {}", e)
@@ -78,7 +78,7 @@ impl Prover {
     }
 }
 
-pub fn handle_challenge(stream: &TcpStream, msg: &[u8], receiver: mpsc::Receiver<Signal>) {
+pub fn handle_challenge(stream: &mut TcpStream, msg: &[u8], receiver: mpsc::Receiver<Signal>) {
     let mut counter = 0;
     while counter < MAX_NUM_PROOFS {
         match receiver.try_recv() {  //PROBLEMA: QUA SI FERMA SEMPRE. MI SERVIREBBE UNA NOTIFICA CONTINUE A OGNI CICLO. INVECE IO VORREI UNA NOTIFICA STOP QUANDO SERVE E NEL RESTO DEL TEMPO RIMANE CONTINUE
@@ -127,7 +127,7 @@ pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a[u8] 
     }
 }
 
-pub fn handle_message(stream: &TcpStream, msg: &[u8]) {
+pub fn handle_message(stream: &mut TcpStream, msg: &[u8]) {
     let tag = msg[0];
     let sender: Sender<Signal>;
     let receiver: Receiver<Signal>;
@@ -143,7 +143,7 @@ pub fn handle_message(stream: &TcpStream, msg: &[u8]) {
     }
 }
 
-pub fn create_and_send_proof_batches(stream: &TcpStream, msg: &[u8], receiver: &mpsc::Receiver<Signal>) {
+pub fn create_and_send_proof_batches(stream: &mut TcpStream, msg: &[u8], receiver: &mpsc::Receiver<Signal>) {
     let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
     let mut position: u32 = INITIAL_POSITION;  //Given parameter
     let seed = msg[1];
@@ -157,7 +157,7 @@ pub fn create_and_send_proof_batches(stream: &TcpStream, msg: &[u8], receiver: &
     response_msg[1..].copy_from_slice(&proof_batch);
     let my_slice: &[u8] = &response_msg;
     
-    send_msg(&mut Some(stream), &response_msg);
+    send_msg(&stream, &response_msg);
 
     info!("Batch of proofs sent from prover at {} to the verifier at address {}",
             stream.local_addr().unwrap().to_string(),stream.peer_addr().unwrap().to_string());
