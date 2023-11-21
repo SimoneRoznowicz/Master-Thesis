@@ -1,15 +1,16 @@
-pub struct Node {
-    id: u64,
-    variant: NodeType, 
+use crate::communication::structs::Notification;
+
+pub struct NotifyNode {
+    pub buff: Vec<u8>,
+    pub notification: Notification,
 }
 
-impl Node {
-    pub fn new(id: u64, variant: NodeType) -> Node {
-        Node {id,variant}
+impl NotifyNode {
+    pub fn new(buff: Vec<u8>, variant: Notification) -> NotifyNode {
+        NotifyNode {
+            buff,
+            notification: variant, // Replace with your actual variant
+        }
     }
 }
 
-pub enum NodeType {
-    Prover,
-    Verifier
-}

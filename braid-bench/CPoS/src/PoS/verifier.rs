@@ -2,7 +2,9 @@ use std::{str::Bytes, net::{TcpStream, Shutdown, TcpListener}, collections::hash
 use log::{info,error};
 use rand::{Rng, seq::SliceRandom};
 
-use crate::{communication::{client::{send_msg},structs::{Phase, Signal}, handle_prover::random_path_generator}, block_generation::utils::Utils::{INITIAL_POSITION, INITIAL_BLOCK_ID, BATCH_SIZE, NUM_BLOCK_PER_UNIT, NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY, MAX_NUM_PROOFS}};
+use crate::{communication::{client::{send_msg},structs::{Phase, Notification}, handle_prover::random_path_generator}, block_generation::utils::Utils::{INITIAL_POSITION, INITIAL_BLOCK_ID, BATCH_SIZE, NUM_BLOCK_PER_UNIT, NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY, MAX_NUM_PROOFS}};
+
+use super::structs::NotifyNode;
 
 #[derive(Debug)]
 pub struct Verifier {
@@ -13,7 +15,7 @@ pub struct Verifier {
 }
 
 impl Verifier {
-    pub fn new(address: String, prover_address: String) -> Verifier {
+    pub fn new<'a>(address: String, prover_address: String) -> Verifier {
         let seed: u8 = rand::thread_rng().gen();
         //return Verifier {address, prover_address, seed}
         //let mut stream: Option<TcpStream> = None;
@@ -30,19 +32,25 @@ impl Verifier {
             stream
         };
 
+        let sender: Sender<NotifyNode>;
+        let receiver: Receiver<NotifyNode>;
+        (sender,receiver) = mpsc::channel();
+
+        this.start_server(sender);
         this
     }
 
-    pub fn start_server(&self) {
+    fn start_server(&self, sender: Sender<NotifyNode>) {
         info!("Verifier server listening on address {}", self.address);
-        let listener = TcpListener::bind(&self.address).unwrap(); 
-        thread::spawn(move ||{
+        let listener = TcpListener::bind(&self.address).unwrap();
+        // let sender_clone: Sender<NotifyNode<'static>> = sender.clone();
+        thread::spawn(move || {
             for stream in listener.incoming() {
                 match stream {
                     Ok(mut stream) => {
                         info!("New connection: {}", stream.peer_addr().unwrap());
                         let mut data = [0; 128]; // Use a smaller buffer size
-                        handle_message(handle_stream(&mut stream, &mut data));
+                        handle_message(handle_stream(&mut stream, &mut data), sender.clone());
                     }
                     Err(e) => {
                         error!("Error: {}", e)
@@ -51,10 +59,28 @@ impl Verifier {
             }
         });
     }
+    
 
-    pub fn handle_verification(msg: &[u8]) -> bool {
-        return verify_time_challenge_bound() && verify_proofs(msg); //if the first is wrong, don't execute verify_proofs
+    pub fn main_handler(&self, receiver: Receiver<NotifyNode>){
+        while true{
+            match receiver.recv() {
+                Ok(notifyNode) => {
+                    let notification = notifyNode.notification;
+                    match notification {
+                        Notification::Verification => {
+                            //send challenge to prover for the execution
+                            send_msg(&self.stream, &notifyNode.buff);
+                            info!("Notify the prover to stop sending proofs");
+                        },
+                        Notification::Continue => todo!(),
+                        Notification::Stop => todo!(),
+                    }
+                },
+                Err(_) => todo!(),
+            }
+        }
     }
+
     
     //the verifier sends a challenge composed of a seed σ, a proof of space id π, and a given byte position β.
     pub fn challenge(&mut self) {
@@ -68,10 +94,14 @@ impl Verifier {
         //self.start_client(&self.prover_address.clone(), &msg);
     }
 
-    //get a stream of bytes as input. Recompute all the blocks in order. Check if each byte is correct according to the computed block 
-    fn verify() -> bool{
-        return true;
-    }   
+    pub fn handle_verification(&self, msg: &[u8]) -> bool {
+        if(msg.len()>4){        //FAKE: TODO CONSIDERING THE BUFFER ALREADY STORED BY THE VERIFIER
+            let msg_to_send: [u8; 1] = [2];
+            send_msg(&self.stream, msg)
+        }
+        return verify_time_challenge_bound() && verify_proofs(msg); //if the first is wrong, don't execute verify_proofs
+    }
+    
 
     pub fn start_client(&mut self, address: &String, msg: &[u8]) {
         let stream = TcpStream::connect(address);
@@ -137,18 +167,23 @@ pub fn sample_generate_verify(msg: &[u8], i: u32) -> bool {
     return false;
 }
 
-pub fn handle_message(msg: &[u8]) {
+pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
     let tag = msg[0];
-    //let sender: Sender<Signal>;
-    //let receiver: Receiver<Signal>;
-    //(sender,receiver) = mpsc::channel();
-    if(tag == 1){    //handle verification
-        //handle_verification(msg);
+    if tag == 1 {
+        info!("Thread in verifier notified of the new buffer. Send for verification to the main thread");
+        // let ff = NotifyNode::new(msg, Notification::Verification);
+        let not = Notification::Verification;
+        let vec = msg.to_vec();
+        let ff = NotifyNode{ buff: vec, notification: Notification::Verification };
+        sender.send(ff);
     }
+
     // else if (tag == 2){
     //     //self.stop_sending_proofs(sender);            
     // }
     else{
-        error!("Received wrong round_id: this is a Prover, the round_id is {}", tag)
+        error!("Received wrong tag: this is a Prover, the round_id is {}", tag)
     }
 }
+
+

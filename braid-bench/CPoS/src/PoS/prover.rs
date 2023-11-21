@@ -15,11 +15,11 @@ use crate::block_generation::encoder::generate_block;
 use crate::block_generation::utils::Utils::{MAX_NUM_PROOFS, BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_PER_UNIT};
 use crate::communication::client::send_msg;
 use crate::communication::handle_prover::random_path_generator;
-use crate::communication::structs::Signal;
+use crate::communication::structs::Notification;
 use crate::communication::{structs::Phase};
 use crate::block_generation::blockgen::{self, BlockGroup};
 
-use super::structs::Node;
+use super::structs::NotifyNode;
 use super::verifier;
 
 #[derive(Debug)]
@@ -78,24 +78,24 @@ impl Prover {
     }
 }
 
-pub fn handle_challenge(stream: &mut TcpStream, msg: &[u8], receiver: mpsc::Receiver<Signal>) {
+pub fn handle_challenge(stream: &mut TcpStream, msg: &[u8], receiver: mpsc::Receiver<Notification>) {
     let mut counter = 0;
     while counter < MAX_NUM_PROOFS {
         match receiver.try_recv() {  //PROBLEMA: QUA SI FERMA SEMPRE. MI SERVIREBBE UNA NOTIFICA CONTINUE A OGNI CICLO. INVECE IO VORREI UNA NOTIFICA STOP QUANDO SERVE E NEL RESTO DEL TEMPO RIMANE CONTINUE
             Ok(notification) => {
                 match notification {
-                    Signal::Continue => {
-                        create_and_send_proof_batches(stream, msg,&receiver);
+                    Notification::Continue => {
+                        create_and_send_proof_batches(stream, msg, &receiver);
                     }
-                    Signal::Stop => {
+                    Notification::Stop => {
                         info!("Received Stop signal: the prover stopped sending proof batches");
                         break;
                     }
-                    Signal::Verification => todo!(),
+                    Notification::Verification => todo!(),
                 }
             }
             Err(mpsc::TryRecvError::Empty) => {
-                create_and_send_proof_batches(stream, msg,&receiver);
+                create_and_send_proof_batches(stream, msg, &receiver);
             }
             Err(mpsc::TryRecvError::Disconnected) => {
                 error!("The prover has been disconnected");
@@ -106,8 +106,8 @@ pub fn handle_challenge(stream: &mut TcpStream, msg: &[u8], receiver: mpsc::Rece
     }
 }
 
-pub fn stop_sending_proofs(sender: mpsc::Sender<Signal>) {
-    sender.send(Signal::Stop).unwrap();
+pub fn stop_sending_proofs(sender: mpsc::Sender<Notification>) {
+    sender.send(Notification::Stop).unwrap();
 }
 
 pub fn read_byte_from_file() -> u8 {
@@ -129,8 +129,8 @@ pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a[u8] 
 
 pub fn handle_message(stream: &mut TcpStream, msg: &[u8]) {
     let tag = msg[0];
-    let sender: Sender<Signal>;
-    let receiver: Receiver<Signal>;
+    let sender: Sender<Notification>;
+    let receiver: Receiver<Notification>;
     (sender,receiver) = mpsc::channel();
     if(tag == 0){
         handle_challenge(stream, msg, receiver);
@@ -143,7 +143,7 @@ pub fn handle_message(stream: &mut TcpStream, msg: &[u8]) {
     }
 }
 
-pub fn create_and_send_proof_batches(stream: &mut TcpStream, msg: &[u8], receiver: &mpsc::Receiver<Signal>) {
+pub fn create_and_send_proof_batches(stream: &mut TcpStream, msg: &[u8], receiver: &mpsc::Receiver<Notification>) {
     let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
     let mut position: u32 = INITIAL_POSITION;  //Given parameter
     let seed = msg[1];
@@ -154,6 +154,7 @@ pub fn create_and_send_proof_batches(stream: &mut TcpStream, msg: &[u8], receive
         proof_batch[iteration_c] = read_byte_from_file();
     }
     let mut response_msg: [u8; BATCH_SIZE+1] = [1; BATCH_SIZE+1];
+    //the tag is 1 -->
     response_msg[1..].copy_from_slice(&proof_batch);
     let my_slice: &[u8] = &response_msg;
     

@@ -44,7 +44,6 @@ fn main() {
     
     let mut verifier = Verifier::new(address_verifier, address_prover);
     info!("HELLO0");
-    verifier.start_server();
     
     info!("HELLO1");
     verifier.challenge();

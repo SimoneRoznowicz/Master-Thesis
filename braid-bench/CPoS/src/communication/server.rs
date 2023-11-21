@@ -4,8 +4,7 @@ use std::net::{TcpListener, TcpStream, Shutdown};
 use std::io::{Read, Write};
 use crate::communication::handle_prover;
 use crate::communication::handle_verifier;
-use crate::PoS::structs::NodeType;
-use crate::communication::structs::Signal;
+use crate::communication::structs::Notification;
 use std::sync::mpsc::{self, Sender, Receiver};
 
 extern crate log;

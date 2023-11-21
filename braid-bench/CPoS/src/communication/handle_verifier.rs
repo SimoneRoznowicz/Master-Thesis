@@ -5,7 +5,6 @@ use std::net::TcpStream;
 use aes::Block;
 use rand::seq::SliceRandom;
 
-use crate::PoS::structs::NodeType;
 use crate::block_generation::blockgen::block_gen;
 use crate::block_generation::encoder::generate_block;
 use crate::block_generation::utils::Utils::{NUM_PROOFS_TO_VERIFY, NUM_FRAGMENTS_PER_UNIT, NUM_BLOCK_PER_UNIT, INITIAL_BLOCK_ID, INITIAL_POSITION, BATCH_SIZE};
