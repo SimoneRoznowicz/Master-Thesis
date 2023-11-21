@@ -27,22 +27,21 @@ impl Verifier {
 
     pub fn start_server(&self) {
         info!("Verifier server listening on address {}", self.address);
-        
-        let listener = TcpListener::bind(&self.address).unwrap();
-        for stream in listener.incoming() {
-            match stream {
-                Ok(mut stream) => {
-                    thread::spawn(move ||{
+        let listener = TcpListener::bind(&self.address).unwrap(); 
+        thread::spawn(move ||{
+            for stream in listener.incoming() {
+                match stream {
+                    Ok(mut stream) => {
                         info!("New connection: {}", stream.peer_addr().unwrap());
                         let mut data = [0; 128]; // Use a smaller buffer size
                         handle_message(handle_stream(&mut stream, &mut data));
-                    });
-                }
-                Err(e) => {
-                    error!("Error: {}", e)
+                    }
+                    Err(e) => {
+                        error!("Error: {}", e)
+                    }
                 }
             }
-        }
+        });
     }
 
     pub fn handle_verification(msg: &[u8]) -> bool {
@@ -55,11 +54,13 @@ impl Verifier {
 
     //the verifier sends a challenge composed of a seed σ, a proof of space id π, and a given byte position β.
     pub fn challenge(&mut self) {
+        error!("Challenge being prepared by the verifier...");
         //tag is array[0].           tag == 0 -> CHALLENGE    tag == 1 -> VERIFICATION    tag == 2 -> STOP (sending proofs)
         let tag: u8 = 0; 
         let seed: u8 = rand::thread_rng().gen_range(0..=255);
         let msg: [u8; 2] = [tag,seed];
         //send challenge to prover for the execution
+        info!("Challenge being prepared by the verifier...");
         self.start_client(&self.prover_address.clone(), &msg);
     }
 

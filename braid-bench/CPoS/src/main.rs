@@ -8,6 +8,8 @@ extern crate env_logger;
 
 use std::thread;
 use std::time::Duration;
+use log::info;
+
 use crate::PoS::verifier::Verifier;
 //use crate::communication::server::start_server;
 use crate::PoS::prover::Prover;
@@ -38,7 +40,13 @@ fn main() {
     println!("Main");
     let prover = Prover::new(address_prover.clone(), address_verifier.clone());
 
+    prover.start_server();
+    
     let mut verifier = Verifier::new(address_verifier, address_prover);
+    info!("HELLO0");
+    verifier.start_server();
+    
+    info!("HELLO1");
     verifier.challenge();
     thread::sleep(Duration::from_secs(100));
 }

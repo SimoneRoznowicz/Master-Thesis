@@ -56,25 +56,25 @@ impl Prover {
 
         this
     }
-
+    
     pub fn start_server(&self) {
         info!("Prover server listening on address {}", self.address);
         let listener = TcpListener::bind(&self.address).unwrap();
-        for stream in listener.incoming() {
-            match stream {
-                Ok(mut stream) => {
-                    thread::spawn(move ||{
+        thread::spawn(move ||{
+            for stream in listener.incoming() {
+                match stream {
+                    Ok(mut stream) => {
                         info!("New connection: {}", stream.peer_addr().unwrap());
                         let mut data = [0; 128]; // Use a smaller buffer size
                         let retrieved_data = handle_stream(&mut stream, &mut data);
                         handle_message(&stream, retrieved_data);
-                    });
-                }
-                Err(e) => {
-                    error!("Error: {}", e)
+                    }
+                    Err(e) => {
+                        error!("Error: {}", e)
+                    }
                 }
             }
-        }
+        });
     }
 }
 
