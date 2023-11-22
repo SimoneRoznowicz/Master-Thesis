@@ -9,7 +9,7 @@ use std::sync::mpsc::channel;
 use std::thread::{self, Thread};
 
 use aes::Block;
-use log::{info, error, debug};
+use log::{info, error, debug, trace};
 
 use crate::block_generation::encoder::generate_block;
 use crate::block_generation::utils::Utils::{MAX_NUM_PROOFS, BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_PER_UNIT};
@@ -60,18 +60,23 @@ impl Prover {
     pub fn start_server(&mut self) {
         info!("Prover server listening on address {}", self.address);
         let listener = TcpListener::bind(&self.address).unwrap();
-        thread::spawn(move ||{
-            for stream in listener.incoming() {
-                match stream {
-                    Ok(mut stream) => {
-                        info!("New connection: {}", stream.peer_addr().unwrap());
-                        let mut data = [0; 128]; // Use a smaller buffer size
-                        let retrieved_data = handle_stream(&mut stream, &mut data);
-                        handle_message(&mut stream, retrieved_data);
-                    }
-                    Err(e) => {
-                        error!("Error: {}", e)
-                    }
+        thread::spawn(move || {
+            loop{
+                trace!("Started loop in prover");
+                for stream in listener.incoming() {
+                    thread::spawn(move || {
+                        match stream {
+                            Ok(mut stream) => {
+                                info!("New connection: {}", stream.peer_addr().unwrap());
+                                let mut data = [0; 128]; // Use a smaller buffer size
+                                let retrieved_data = handle_stream(&mut stream, &mut data);
+                                handle_message(&mut stream, retrieved_data);
+                            }
+                            Err(e) => {
+                                error!("Error: {}", e)
+                            }
+                        }
+                    });
                 }
             }
         });
@@ -102,7 +107,7 @@ pub fn handle_challenge(stream: &mut TcpStream, msg: &[u8], receiver: mpsc::Rece
                 break;
             }
         }
-        counter += BATCH_SIZE;
+        counter += BATCH_SIZE*10;
     }
 }
 
@@ -133,13 +138,16 @@ pub fn handle_message(stream: &mut TcpStream, msg: &[u8]) {
     let receiver: Receiver<Notification>;
     (sender,receiver) = mpsc::channel();
     if(tag == 0){
+        trace!("In prover the tag is 0");
         handle_challenge(stream, msg, receiver);
     }
     else if (tag == 2){
+        trace!("In prover the tag is 2");
         stop_sending_proofs(sender);            
     }
     else{
-        error!("Received wrong round_id: this is a Prover, the round_id is {}", tag)
+        trace!("In prover the tag is NOT 1 and NOT 2");
+        error!("Received wrong tag: this is a Prover, the tag is {}", tag)
     }
 }
 
