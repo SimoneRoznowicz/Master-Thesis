@@ -15,7 +15,25 @@ pub struct Verifier {
 }
 
 impl Verifier {
-    pub fn new<'a>(address: String, prover_address: String) -> Verifier {
+
+    pub fn start(address: String, prover_address: String){
+        //channel to allow the verifier threads communicate with the main thread
+        let sender: Sender<NotifyNode>;
+        let receiver: Receiver<NotifyNode>;
+        (sender,receiver) = mpsc::channel();
+
+        let mut verifier = Verifier::new(address, prover_address, sender);
+        //
+
+
+
+        //OVVIAMENTE QUA E IL PROBLEMA: MAIN HANDLER E' INFINITO. NON TONI A QUEL THREAD... FORSE METTI MAIN HANDLER SOTTO A UN NUOVO THREADS
+        //INOLTRE DOVE USI GIA I THREADS, CONTROLLA CHE CREI PIU COPIE MA IN TEORIA SI DATO CHE CICLI
+        verifier.main_handler(receiver);
+        verifier.challenge();
+    }
+
+    fn new(address: String, prover_address: String, sender: Sender<NotifyNode>) -> Verifier {
         let seed: u8 = rand::thread_rng().gen();
         //return Verifier {address, prover_address, seed}
         //let mut stream: Option<TcpStream> = None;
@@ -32,11 +50,10 @@ impl Verifier {
             stream
         };
 
-        let sender: Sender<NotifyNode>;
-        let receiver: Receiver<NotifyNode>;
-        (sender,receiver) = mpsc::channel();
+        
 
         this.start_server(sender);
+        info!("arrivato qui");
         this
     }
 
@@ -59,9 +76,8 @@ impl Verifier {
             }
         });
     }
-    
 
-    pub fn main_handler(&self, receiver: Receiver<NotifyNode>){
+    fn main_handler(&self, receiver: Receiver<NotifyNode>){
         while true{
             match receiver.recv() {
                 Ok(notifyNode) => {
@@ -80,7 +96,6 @@ impl Verifier {
             }
         }
     }
-
     
     //the verifier sends a challenge composed of a seed σ, a proof of space id π, and a given byte position β.
     pub fn challenge(&mut self) {
@@ -94,7 +109,7 @@ impl Verifier {
         //self.start_client(&self.prover_address.clone(), &msg);
     }
 
-    pub fn handle_verification(&self, msg: &[u8]) -> bool {
+    fn handle_verification(&self, msg: &[u8]) -> bool {
         if(msg.len()>4){        //FAKE: TODO CONSIDERING THE BUFFER ALREADY STORED BY THE VERIFIER
             let msg_to_send: [u8; 1] = [2];
             send_msg(&self.stream, msg)
@@ -103,7 +118,7 @@ impl Verifier {
     }
     
 
-    pub fn start_client(&mut self, address: &String, msg: &[u8]) {
+    fn start_client(&mut self, address: &String, msg: &[u8]) {
         let stream = TcpStream::connect(address);
         match stream {
             Ok(mut stream) => {
@@ -118,11 +133,11 @@ impl Verifier {
     } 
 }
 
-pub fn verify_time_challenge_bound() -> bool {
+fn verify_time_challenge_bound() -> bool {
     return true;
 }
 
-pub fn verify_proofs(msg: &[u8]) -> bool {
+fn verify_proofs(msg: &[u8]) -> bool {
     let proof_batch = msg[1..].to_vec();
 
     let mut rng = rand::thread_rng();
@@ -137,7 +152,7 @@ pub fn verify_proofs(msg: &[u8]) -> bool {
     return true;
 }
 
-pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a[u8] {
+fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a[u8] {
     match stream.read(data) {
         Ok(size) => {
             return &data[..size];
@@ -150,7 +165,7 @@ pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a[u8] 
     }
 }
 
-pub fn sample_generate_verify(msg: &[u8], i: u32) -> bool {
+fn sample_generate_verify(msg: &[u8], i: u32) -> bool {
     //first calculate the seed for each possible block: which means block_id and position. Store in a vector
     let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
     let mut position: u32 = INITIAL_POSITION;  //Given parameter
@@ -167,7 +182,7 @@ pub fn sample_generate_verify(msg: &[u8], i: u32) -> bool {
     return false;
 }
 
-pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
+fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
     let tag = msg[0];
     if tag == 1 {
         info!("Thread in verifier notified of the new buffer. Send for verification to the main thread");

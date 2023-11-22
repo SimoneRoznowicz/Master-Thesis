@@ -42,10 +42,9 @@ fn main() {
 
     prover.start_server();
     
-    let mut verifier = Verifier::new(address_verifier, address_prover);
+    Verifier::start(address_verifier, address_prover);
     info!("HELLO0");
     
     info!("HELLO1");
-    verifier.challenge();
     thread::sleep(Duration::from_secs(100));
 }
