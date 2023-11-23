@@ -9,15 +9,16 @@ use crate::block_generation::blockgen::block_gen;
 use crate::block_generation::encoder::generate_block;
 use crate::block_generation::utils::Utils::{NUM_PROOFS_TO_VERIFY, NUM_FRAGMENTS_PER_UNIT, NUM_BLOCK_PER_UNIT, INITIAL_BLOCK_ID, INITIAL_POSITION, BATCH_SIZE};
 
-pub fn handle_verification(msg: &[u8], stream: &TcpStream) -> bool {
-    return verify_time_challenge_bound() && verify_proofs(msg, stream); //if the first is wrong, don't execute verify_proofs
-}
+// pub fn handle_verification(msg: &[u8], stream: &TcpStream) -> bool {
+//     return verify_time_challenge_bound() && verify_proofs(msg, stream); //if the first is wrong, don't execute verify_proofs
+// }
 
 pub fn verify_time_challenge_bound() -> bool {
     return true;
 }
 
 pub fn verify_proofs(msg: &[u8], stream: &TcpStream) -> bool {
+    
     let proof_batch = msg[1..].to_vec();
     // if NUM_PROOFS_TO_VERIFY > msg.len().try_into().unwrap() {
     //     //NUM_PROOFS_TO_VERIFY = msg.len().try_into().unwrap() };

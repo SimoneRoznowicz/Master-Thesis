@@ -21,7 +21,10 @@ use log::{info,error,warn};
 
 pub fn send_msg(mut stream: &TcpStream, msg: &[u8]) {
     match stream.write(msg) {
-        Ok(_) => {info!("Message correctly sent from {} to {}", stream.local_addr().unwrap().to_string(), stream.peer_addr().unwrap().to_string())},
+        Ok(_) => {
+            stream.flush();
+            info!("Message correctly sent from {} to {}", stream.local_addr().unwrap().to_string(), stream.peer_addr().unwrap().to_string())
+        },
         Err(_) => {error!("Message not sent correctly!")},
     };
 }

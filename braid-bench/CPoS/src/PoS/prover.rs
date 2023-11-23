@@ -165,7 +165,7 @@ pub fn create_and_send_proof_batches(stream: &mut TcpStream, msg: &[u8], receive
     //the tag is 1 -->
     response_msg[1..].copy_from_slice(&proof_batch);
     let my_slice: &[u8] = &response_msg;
-    
+    debug!("IN PROVER MSG[0] ==  {}",my_slice[0]);
     send_msg(&stream, &response_msg);
 
     info!("Batch of proofs sent from prover at {} to the verifier at address {}",
