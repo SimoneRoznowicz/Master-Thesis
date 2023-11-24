@@ -7,7 +7,7 @@ pub enum Phase {
 
 #[derive(Debug,Copy,Clone)]
 pub enum Notification {
-    Continue,
+    Start,
     Stop,
     Verification,
 }

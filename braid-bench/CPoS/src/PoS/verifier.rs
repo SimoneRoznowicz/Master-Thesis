@@ -62,27 +62,6 @@ impl Verifier {
                 handle_message(handle_stream(&mut stream_clone, &mut data), sender_clone);
             }
         });
-        // info!("Verifier server listening on address sss {}", self.address);
-        // let listener = TcpListener::bind(&self.stream.local_addr().unwrap()).unwrap();
-        // thread::spawn(move || {
-        //     trace!("Started loop in Verifier sss");
-        //     for stream_option in listener.incoming() { //PALESEMENTE QUA SI BLOCCA!!!!
-        //         trace!("IN VERIFIER NEW STREAM1!! sss");
-        //             match stream_option {
-        //                 Ok(mut stream) => {
-        //                     loop{
-        //                         let sender_clone = sender.clone();
-        //                         info!("New connection verification sss: {}", stream.peer_addr().unwrap());
-        //                         let mut data = [0; 128]; // Use a smaller buffer size
-        //                         handle_message(handle_stream(&mut stream, &mut data), sender_clone);
-        //                     }
-        //                 }
-        //                 Err(e) => {
-        //                     error!("Error: {}", e)
-        //                 }
-        //             }
-        //     }
-        // });
     }
 
     fn main_handler(&mut self, receiver: &Receiver<NotifyNode>){
@@ -108,7 +87,7 @@ impl Verifier {
                                 //send_msg(&stream_clone, &notifyNode.buff);
                                 info!("Notify the prover to stop sending proofs");
                             },
-                            Notification::Continue => todo!(),
+                            Notification::Start => todo!(),
                             Notification::Stop => todo!(),
                         }
                     });
@@ -122,7 +101,8 @@ impl Verifier {
     
     //the verifier sends a challenge composed of a seed σ, a proof of space id π, and a given byte position β.
     pub fn challenge(&mut self) {
-        //tag is array[0].           tag == 0 -> CHALLENGE    tag == 1 -> VERIFICATION    tag == 2 -> STOP (sending proofs)
+        //tag is msg[0].           tag == 0 -> CHALLENGE    tag == 1 -> VERIFICATION    tag == 2 -> STOP (sending proofs)
+        //seed is msg[1]
         let tag: u8 = 0; 
         let seed: u8 = rand::thread_rng().gen_range(0..=255);
         let msg: [u8; 2] = [tag,seed];
@@ -130,23 +110,7 @@ impl Verifier {
         send_msg(&mut self.stream, &msg);
         info!("Challenge sent to the verifier...");
 
-        //self.start_client(&self.prover_address.clone(), &msg);
     }
-    
-
-    // fn start_client(&mut self, address: &String, msg: &[u8]) {
-    //     let stream = TcpStream::connect(address);
-    //     match stream {
-    //         Ok(mut stream) => {
-    //             info!("Successfully connected to address: {}", address);
-    //             send_msg(&mut stream, msg);
-    //         },
-    //         Err(e) => {
-    //             error!("Failed to connect: {}", e);
-    //         }
-    //     }
-    //     info!("client terminated.");
-    // } 
 }
 
 fn handle_verification(stream: &TcpStream, msg: &[u8]) -> bool {

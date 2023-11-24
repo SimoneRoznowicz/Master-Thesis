@@ -38,10 +38,15 @@ fn main() {
     let address_verifier = format!("{}:{}", host_verifier, port_verifier);
 
     println!("Main");
-    let mut prover = Prover::new(address_prover.clone(), address_verifier.clone());
+    //let mut prover = Prover::new(address_prover.clone(), address_verifier.clone());
+    let addres_prover_clone = address_prover.clone();
+    let addres_verifier_clone = address_verifier.clone();
 
-    prover.start_server();
-    
+    thread::spawn(move || {
+        Prover::start(addres_prover_clone, addres_verifier_clone);
+    });    
+    thread::sleep(Duration::from_secs(8));
+
     Verifier::start(address_verifier, address_prover);
     info!("HELLO0");
     
