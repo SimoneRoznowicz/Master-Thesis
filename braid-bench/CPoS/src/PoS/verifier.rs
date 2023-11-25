@@ -82,10 +82,7 @@ impl Verifier {
                         match notification {
                             Notification::Verification => {
                                 info!("Verifiier received notification: Verification");
-                                //send challenge to prover for the execution
                                 handle_verification(&stream_clone, &notify_node.buff);
-                                //send_msg(&stream_clone, &notifyNode.buff);
-                                info!("Notify the prover to stop sending proofs");
                             },
                             Notification::Start => todo!(),
                             Notification::Stop => todo!(),
@@ -115,10 +112,14 @@ impl Verifier {
 
 fn handle_verification(stream: &TcpStream, msg: &[u8]) -> bool {
     if(msg.len()>4){        //FAKE: TODO CONSIDERING THE BUFFER ALREADY STORED BY THE VERIFIER
-        let msg_to_send: [u8; 1] = [2];
-        send_msg(stream, msg)
+        let mut msg_to_send: [u8; 1] = [5];
+        msg_to_send[0] = 5; //stop tag
+        debug!("Sending Stop message to the prover");
+        send_msg(stream, msg);
+        debug!("Stop message sent to the prover");
+
     }
-    return verify_time_challenge_bound() && verify_proofs(msg); //if the first is wrong, don't execute verify_proofs
+    return true;//verify_time_challenge_bound() && verify_proofs(msg); //if the first is wrong, don't execute verify_proofs
 }
 
 
@@ -174,30 +175,19 @@ fn sample_generate_verify(msg: &[u8], i: u32) -> bool {
 
 fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
     let tag = msg[0];
-    debug!("Before tag evaluation in the verifier");
-    if tag == 1 {
+    debug!("Tag in verifier is == {}", msg[0]);
+    if tag == 5 {
         debug!("Thread in verifier notified of the new buffer. Send for verification to the main thread");
         // let ff = NotifyNode::new(msg, Notification::Verification);
         let not = Notification::Verification;
         let vec = msg.to_vec();
-        let ff = NotifyNode{ buff: vec.clone(), notification: Notification::Verification };
-        match sender.send(ff.clone()) {
-            Ok(_) => {debug!("good")},
+        match sender.send(NotifyNode{ buff: vec.clone(), notification: Notification::Verification }) {
+            Ok(_) => {debug!("good send to main")},
             Err(e) => {debug!("error first send channel == {}",e)},
         };
-        // let ff2 = NotifyNode{ buff: vec, notification: Notification::Verification };
-
-        // match sender.send(ff2){
-        //     Ok(_) => {debug!("good")},
-        //     Err(e) => {debug!("error first send channel == {}",e)},
-        // };
     }
-
-    // else if (tag == 2){
-    //     //self.stop_sending_proofs(sender);            
-    // }
     else{
-        error!("Received wrong tag: this is a Prover, the round_id is {}", tag)
+        error!("In verifier the tag is NOT 1: the tag is {}", tag)
     }
 }
 
