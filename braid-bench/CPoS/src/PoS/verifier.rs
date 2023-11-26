@@ -1,4 +1,4 @@
-use std::{str::Bytes, net::{TcpStream, Shutdown, TcpListener}, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, sync::mpsc::{self, Sender, Receiver}, io::Read, thread};
+use std::{str::Bytes, net::{TcpStream, Shutdown, TcpListener}, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, sync::mpsc::{self, Sender, Receiver}, io::Read, thread, vec};
 use log::{info,error, warn, debug, trace};
 use rand::{Rng, seq::SliceRandom};
 
@@ -11,7 +11,9 @@ pub struct Verifier {
     address: String,
     prover_address: String,
     seed: u8,
-    stream: TcpStream
+    stream: TcpStream,
+    stopped: bool,
+    //proofs: Vec<u8>,
 }
 
 impl Verifier {
@@ -22,17 +24,15 @@ impl Verifier {
         let receiver: Receiver<NotifyNode>;
         (sender,receiver) = mpsc::channel();
 
-        let mut verifier = Verifier::new(address, prover_address, sender);
+        let seed = rand::thread_rng().gen();
+        let mut verifier = Verifier::new(address, prover_address, sender.clone(), seed);
 
-        //OVVIAMENTE QUA E IL PROBLEMA: MAIN HANDLER E' INFINITO. NON TONI A QUEL THREAD... FORSE METTI MAIN HANDLER SOTTO A UN NUOVO THREADS
-        //INOLTRE DOVE USI GIA I THREADS, CONTROLLA CHE CREI PIU COPIE MA IN TEORIA SI DATO CHE CICLI
         info!("Verifier starting main_handler()");
-        verifier.main_handler(&receiver);
-        //verifier.challenge();
+        verifier.main_handler(&receiver,&sender);
     }
 
-    fn new(address: String, prover_address: String, sender: Sender<NotifyNode>) -> Verifier {
-        let seed: u8 = rand::thread_rng().gen();
+    fn new(address: String, prover_address: String, sender: Sender<NotifyNode>, seed: u8) -> Verifier {
+        
         //return Verifier {address, prover_address, seed}
         //let mut stream: Option<TcpStream> = None;
         let stream_option = TcpStream::connect(prover_address.clone());
@@ -42,11 +42,13 @@ impl Verifier {
             Err(_) => {error!("Error in connection")},
         };
         let stream = stream_option.unwrap();
+        let mut stopped = false;
         let mut this = Self {
             address,
             prover_address,
             seed,
-            stream
+            stream,
+            stopped
         };
         this.start_server(sender);
         this
@@ -57,17 +59,16 @@ impl Verifier {
         thread::spawn(move || {
             loop{
                 let sender_clone = sender.clone();
-                //info!("New connection verification sss: {}", stream.peer_addr().unwrap());
                 let mut data = [0; 128]; // Use a smaller buffer size
                 handle_message(handle_stream(&mut stream_clone, &mut data), sender_clone);
             }
         });
     }
 
-    fn main_handler(&mut self, receiver: &Receiver<NotifyNode>){
+    fn main_handler(&mut self, receiver: &Receiver<NotifyNode>, sender: &Sender<NotifyNode>){
         let mut is_to_verify = true;
-        let mut ii=0;
-        while ii < 2 {
+        let mut is_stopped = false;
+        loop {
             if is_to_verify {
                 info!("Verifier prepares the challenge");
                 self.challenge();
@@ -78,21 +79,33 @@ impl Verifier {
                     info!("Receiver working");
                     let notification = notify_node.notification;
                     let stream_clone = self.stream.try_clone().unwrap();
-                    thread::spawn(move || {
+                    let sender_clone = sender.clone();
                         match notification {
                             Notification::Verification => {
-                                info!("Verifiier received notification: Verification");
-                                handle_verification(&stream_clone, &notify_node.buff);
+                                thread::spawn(move || {
+                                    if is_stopped == false{
+                                        info!("Verifiier received notification: Verification");
+                                        if (handle_verification(&stream_clone, &notify_node.buff)){
+                                            sender_clone.send(NotifyNode {buff: Vec::new(), notification: Notification::Stop}).unwrap();
+                                        }
+                                    }
+                                    else{
+                                        info!("Received notification Verification but this is not required at this point");
+                                    }
+                                });
                             },
+                            Notification::Update => {
+                                self.proof
+                            }
                             Notification::Start => todo!(),
-                            Notification::Stop => todo!(),
+                            Notification::Stop => {
+                                break;
+                            },
                         }
-                    });
                 },
                 Err(e) => {warn!("Error == {}", e)},
             }
             is_to_verify = false;
-            ii+=1;
         }
     }
     
@@ -105,21 +118,20 @@ impl Verifier {
         let msg: [u8; 2] = [tag,seed];
         //send challenge to prover for the execution
         send_msg(&mut self.stream, &msg);
-        info!("Challenge sent to the verifier...");
+        info!("Challenge sent to the prover...");
 
     }
 }
 
-fn handle_verification(stream: &TcpStream, msg: &[u8]) -> bool {
-    if(msg.len()>4){        //FAKE: TODO CONSIDERING THE BUFFER ALREADY STORED BY THE VERIFIER
-        let mut msg_to_send: [u8; 1] = [5];
-        msg_to_send[0] = 5; //stop tag
-        debug!("Sending Stop message to the prover");
-        send_msg(stream, msg);
+fn handle_verification(stream: &TcpStream, msg: &[u8],) -> bool {
+    if(true){        
+        let mut msg_to_send: [u8; 1] = [2];
+        debug!("Sending Stop message to the prover: size msg_to_send[] == {}", msg_to_send[..][0]);
+        send_msg(stream, &msg_to_send[..]);
         debug!("Stop message sent to the prover");
-
+        return true;  //true because sent stop message
     }
-    return true;//verify_time_challenge_bound() && verify_proofs(msg); //if the first is wrong, don't execute verify_proofs
+    return false;        //verify_time_challenge_bound() && verify_proofs(msg); //if the first is wrong, don't execute verify_proofs
 }
 
 
@@ -176,7 +188,7 @@ fn sample_generate_verify(msg: &[u8], i: u32) -> bool {
 fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
     let tag = msg[0];
     debug!("Tag in verifier is == {}", msg[0]);
-    if tag == 5 {
+    if tag == 1 {
         debug!("Thread in verifier notified of the new buffer. Send for verification to the main thread");
         // let ff = NotifyNode::new(msg, Notification::Verification);
         let not = Notification::Verification;

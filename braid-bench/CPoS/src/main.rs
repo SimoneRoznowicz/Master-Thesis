@@ -21,6 +21,14 @@ fn set_logger(){
     env_logger::builder().filter_level(log::LevelFilter::Trace).init();
 }
 
+// fn main(){
+//     let mut var = 1;
+//     thread::spawn(move||{
+//         var = 5;
+//     });
+//     print!("var == {}", var);
+// }
+
 fn main() {
     set_logger();
     //challenge: send 1(tag) + 1(seed)

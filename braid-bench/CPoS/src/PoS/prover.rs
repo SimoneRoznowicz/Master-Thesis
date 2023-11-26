@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, Shutdown, TcpStream};
 use std::option;
 use std::sync::{Arc, Mutex, RwLock};
-use std::sync::mpsc::{Sender, self};
+use std::sync::mpsc::{Sender, self, TryRecvError};
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::channel;
 use std::thread::{self, Thread};
@@ -117,29 +117,30 @@ impl Prover {
                             info!("Received Stop signal: the prover stopped sending proof batches");
                             break;
                         }
-                        Notification::Verification => {warn!("unexpected Continue notification received")}
+                        Notification::Verification => {error!("unexpected Continue notification received")}
                     }
                 }
-                Err(mpsc::TryRecvError::Empty) => {
+                Err(TryRecvError::Empty) => {
                     if(!is_started){
+                        info!("In TryRecvError::Empty send batches");
                         create_and_send_proof_batches(&self.stream_opt, self.seed, &receiver);
                     }
                 }
-                Err(mpsc::TryRecvError::Disconnected) => {
+                Err(TryRecvError::Disconnected) => {
                     error!("The prover has been disconnected");
                     break;
                 }
             }
             counter += BATCH_SIZE*10;
         }
+        warn!("ARRIVED AT END OF LOOP");
     }
 }
 
 pub fn stop_sending_proofs(sender: mpsc::Sender<NotifyNode>) {
-    sender.send(NotifyNode { buff: Vec::new(), notification: Notification::Start}).unwrap();
+    sender.send(NotifyNode {buff: Vec::new(), notification: Notification::Stop}).unwrap();
 }
 
-//QUI LEGGERE FACENDO LOCK PRIMA
 pub fn handle_stream<'a>(stream_opt: &Arc<Mutex<Option<TcpStream>>>, data: &'a mut [u8]) -> &'a[u8] {
     let mut locked_stream = stream_opt.lock().unwrap();//stream_opt.lock().unwrap().as_ref().clone();
     match locked_stream.as_ref().unwrap().read(data) {
@@ -195,7 +196,6 @@ pub fn create_and_send_proof_batches(stream: &Arc<Mutex<Option<TcpStream>>>, see
     let mut response_msg: [u8; BATCH_SIZE+1] = [1; BATCH_SIZE+1];
     //the tag is 1 
     response_msg[1..].copy_from_slice(&proof_batch);
-    response_msg[0] = 5; //FAKEEEEEE
     let my_slice: &[u8] = &response_msg;
     //debug!("IN PROVER MSG[0] ==  {}",my_slice[0]);
     send_msg_prover(stream, &response_msg);

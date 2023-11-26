@@ -11,8 +11,8 @@ pub fn send_msg(mut stream: &TcpStream, msg: &[u8]) {
     match stream.write(msg) {
         Ok(_) => {
             stream.flush();
-            info!("Message correctly sent from {} to {}", stream.local_addr().unwrap().to_string(), stream.peer_addr().unwrap().to_string());
-            info!("Message written is {}", msg[0]);
+            //info!("Message correctly sent from {} to {}", stream.local_addr().unwrap().to_string(), stream.peer_addr().unwrap().to_string());
+            info!("PROVER writes:Message written is {}", msg[0]);
         },
         Err(_) => {error!("Message not sent correctly!")},
     };
@@ -25,7 +25,7 @@ pub fn send_msg_prover(mut stream_opt: &Arc<Mutex<Option<TcpStream>>>, msg: &[u8
         Ok(_) => {
             locked_stream.as_ref().unwrap().flush();
             //info!("Message correctly sent from {} to {}", locked_stream.unwrap().local_addr().unwrap().to_string(), locked_stream.unwrap().peer_addr().unwrap().to_string());
-            info!("Message written is {}", msg[0]);
+            info!("PROVER writes: Message written is {}", msg[0]);
         },
         Err(_) => {error!("Message not sent correctly!")},
     };
