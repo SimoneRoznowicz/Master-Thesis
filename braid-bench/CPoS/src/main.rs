@@ -30,6 +30,7 @@ fn set_logger(){
 // }
 
 fn main() {
+
     set_logger();
     //challenge: send 1(tag) + 1(seed)
     // let data: [u8, 5]= [255, 1, 7];
@@ -54,10 +55,6 @@ fn main() {
         Prover::start(addres_prover_clone, addres_verifier_clone);
     });    
     thread::sleep(Duration::from_secs(8));
-
     Verifier::start(address_verifier, address_prover);
-    info!("HELLO0");
-    
-    info!("HELLO1");
     thread::sleep(Duration::from_secs(100));
 }

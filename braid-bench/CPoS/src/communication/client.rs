@@ -19,8 +19,10 @@ pub fn send_msg(mut stream: &TcpStream, msg: &[u8]) {
 }
 
 pub fn send_msg_prover(mut stream_opt: &Arc<Mutex<Option<TcpStream>>>, msg: &[u8]) {
-    
+    warn!("Starting send_msg_prover");
+
     let mut locked_stream = stream_opt.lock().unwrap();//stream_opt.lock().unwrap().as_ref().clone();
+    warn!("After lock");
     match locked_stream.as_ref().unwrap().write(msg) {
         Ok(_) => {
             locked_stream.as_ref().unwrap().flush();

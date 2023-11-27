@@ -16,7 +16,6 @@ use crate::block_generation::utils::Utils::{MAX_NUM_PROOFS, BATCH_SIZE, INITIAL_
 use crate::communication::client::{send_msg_prover};
 use crate::communication::handle_prover::random_path_generator;
 use crate::communication::structs::Notification;
-use crate::communication::{structs::Phase};
 use crate::block_generation::blockgen::{self, BlockGroup};
 
 use super::structs::NotifyNode;
@@ -57,9 +56,9 @@ impl Prover {
         let mut encoded: Vec<u8> = bincode::serialize(&unit).unwrap();
         let enc_slice: &[u8] = encoded.as_mut_slice();
         // Write the serialized data to a file
-        let mut file = File::create("serailized_file.bin").unwrap();
+                    //let mut file = File::create("serailized_file.bin").unwrap();
         //file.write_all(&encoded)?;
-        file.write_all(&enc_slice);
+                    //file.write_all(&enc_slice);
         let stream: Arc<Mutex<Option<TcpStream>>> = Arc::new(Mutex::new(None));
         let mut this = Self {
             address,
@@ -101,14 +100,16 @@ impl Prover {
     pub fn main_handler(&mut self, receiver: &Receiver<NotifyNode>) {
         let mut counter = 0;
         let mut is_started = false;
-        while counter < MAX_NUM_PROOFS {
+        // while counter < MAX_NUM_PROOFS {
+        loop{
+            debug!("Loop Started Prover");
             match receiver.try_recv() {  //PROBLEMA: QUA SI FERMA SEMPRE. MI SERVIREBBE UNA NOTIFICA CONTINUE A OGNI CICLO. INVECE IO VORREI UNA NOTIFICA STOP QUANDO SERVE E NEL RESTO DEL TEMPO RIMANE CONTINUE
                 Ok(notify_node) => {
                     match notify_node.notification {
                         Notification::Start => {
-                            info!("Start notification received");
+                            warn!("Start notification received");
                             self.seed = notify_node.buff[1];
-                            debug!("seed stored in prover");
+                            warn!("seed stored in prover");
                             let mut stream = self.stream_opt.clone();
                             create_and_send_proof_batches(&stream, self.seed, &receiver);
                             is_started = true;
@@ -117,7 +118,7 @@ impl Prover {
                             info!("Received Stop signal: the prover stopped sending proof batches");
                             break;
                         }
-                        Notification::Verification => {error!("unexpected Continue notification received")}
+                        _ => {error!("unexpected notification received")}
                     }
                 }
                 Err(TryRecvError::Empty) => {
@@ -137,12 +138,13 @@ impl Prover {
     }
 }
 
-pub fn stop_sending_proofs(sender: mpsc::Sender<NotifyNode>) {
+pub fn stop_sending_proofs(sender: &Sender<NotifyNode>) {
     sender.send(NotifyNode {buff: Vec::new(), notification: Notification::Stop}).unwrap();
 }
 
 pub fn handle_stream<'a>(stream_opt: &Arc<Mutex<Option<TcpStream>>>, data: &'a mut [u8]) -> &'a[u8] {
     let mut locked_stream = stream_opt.lock().unwrap();//stream_opt.lock().unwrap().as_ref().clone();
+    warn!("After locking stream in read");
     match locked_stream.as_ref().unwrap().read(data) {
         Ok(size) => {
             return &data[..size];
@@ -153,6 +155,8 @@ pub fn handle_stream<'a>(stream_opt: &Arc<Mutex<Option<TcpStream>>>, data: &'a m
             return &[];
         }
     }
+    warn!("Going to unlock stream in reads");
+
 }
 
 pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
@@ -166,7 +170,7 @@ pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
     else if (tag == 2){
         //Notify the main thread to stop creating proofs
         trace!("In prover the tag is 2");
-        stop_sending_proofs(sender);            
+        stop_sending_proofs(&sender);            
     }
     else{
         error!("In prover the tag is NOT 0 and NOT 2: the tag is {}", tag)
@@ -188,16 +192,18 @@ pub fn create_and_send_proof_batches(stream: &Arc<Mutex<Option<TcpStream>>>, see
     let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
     let mut position: u32 = INITIAL_POSITION;  // Given parameter
     let mut proof_batch: [u8;BATCH_SIZE] = [0;BATCH_SIZE];
-    info!("Prepared batch of proofs...");
+    warn!("Prepared batch of proofs...");
     for mut iteration_c in 0..proof_batch.len() {
+        warn!("Iteration == {}", iteration_c);
         (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
         proof_batch[iteration_c] = read_byte_from_file();
     }
     let mut response_msg: [u8; BATCH_SIZE+1] = [1; BATCH_SIZE+1];
     //the tag is 1 
     response_msg[1..].copy_from_slice(&proof_batch);
-    let my_slice: &[u8] = &response_msg;
+    //let my_slice: &[u8] = &response_msg;
     //debug!("IN PROVER MSG[0] ==  {}",my_slice[0]);
+    warn!("Before send_msg_prover");
     send_msg_prover(stream, &response_msg);
-    info!("Batch of proofs sent from prover to verifier");
+    warn!("Batch of proofs sent from prover to verifier");
 }
