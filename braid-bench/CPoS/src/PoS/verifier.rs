@@ -1,4 +1,4 @@
-use std::{str::Bytes, net::{TcpStream, Shutdown, TcpListener}, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, sync::mpsc::{self, Sender, Receiver}, io::Read, thread, vec};
+use std::{str::Bytes, net::{TcpStream, Shutdown, TcpListener}, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, sync::mpsc::{self, Sender, Receiver}, io::Read, thread::{self, Thread, JoinHandle}, vec, time::Duration};
 use log::{info,error, warn, debug, trace};
 use rand::{Rng, seq::SliceRandom};
 
@@ -75,6 +75,7 @@ impl Verifier {
                 self.challenge();
             }
             info!("Before Recv");
+            let mut my_thread: Option<JoinHandle<()>> = None;
             match receiver.recv() {
                 Ok(notify_node) => {
                     match notify_node.notification {
@@ -82,7 +83,7 @@ impl Verifier {
                             let stream_clone = self.stream.try_clone().unwrap();
                             let sender_clone = sender.clone();        
                             let mut proofs_clone = self.proofs.clone();
-                            thread::spawn(move || {
+                            my_thread = Some(thread::spawn(move || {
                                 if is_stopped == false {
                                     info!("Verifiier received notification: Verification");
                                     handle_verification(&stream_clone, &notify_node.buff, &mut proofs_clone, &sender_clone);
@@ -90,7 +91,7 @@ impl Verifier {
                                 else{
                                     info!("Received notification Verification but this is not required at this point");
                                 }
-                            });
+                            }));
                         },
                         Notification::Verification_Correctness => {
                             let mut proofs_clone = self.proofs.clone();
@@ -108,7 +109,7 @@ impl Verifier {
                             else if (notify_node.buff[0] == 1) {is_fair = Fairness::Unfair(Failure_Reason::Time)}
                             else {is_fair = Fairness::Unfair(Failure_Reason::Correctness)}
                             self.status = (Verification_Status::Terminated, is_fair);
-                            info!("***************************\nResult of the Challenge:{:?}\n***************************", self.status);
+                            info!("\n***************************\nResult of the Challenge:{:?}\n***************************", self.status);
                             //if needed you can reset the status here
                             break;
                         }
@@ -119,6 +120,7 @@ impl Verifier {
             }
             is_to_verify = false;
         }
+        thread::sleep(Duration::from_secs(5));
     }
     
     //the verifier sends a challenge composed of a seed σ, a proof of space id π, and a given byte position β.
@@ -135,8 +137,13 @@ impl Verifier {
 }
 
 
+fn send_stop_msg(stream: &TcpStream){
+    info!("Sending Stop message to the prover");
+    let msg_to_send: [u8; 1] = [2];
+    send_msg(stream, &msg_to_send[..]);
+}
+
 fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u8>, sender: &Sender<NotifyNode>) {
-    return;
     //Update vector of proofs
     proofs.extend(new_proofs);
     sender.send(NotifyNode {buff: new_proofs.to_vec(), notification: Notification::Update}).unwrap();
@@ -146,24 +153,28 @@ fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u
     //Verified Not Correct
     match verify_time_challenge_bound() {
         Time_Verification_Status::Correct => {
-            info!("Sending Stop message to the prover");
-            let msg_to_send: [u8; 1] = [2];
-            send_msg(stream, &msg_to_send[..]);
-    
+            send_stop_msg(stream);
             info!("Starting correctness verifications of the proofs");
-            sender.send(NotifyNode {buff: proofs.to_vec(), notification: Notification::Verification_Correctness}).unwrap();    
+            match sender.send(NotifyNode {buff: proofs.to_vec(), notification: Notification::Verification_Correctness}) {
+                Ok(_) => {},
+                Err(e) => {warn!("{:?} sent through the channel didn't reach the receiver\nReason: {}",Notification::Verification_Correctness,e.to_string())},
+            };    
         },
         Time_Verification_Status::Incorrect => {
+            send_stop_msg(stream);
             info!("Terminating Verification: the time bound was not satisfied by the prover");
             let my_vector = vec![1];  //Unfair(Time Reason)
-            sender.send(NotifyNode {buff: my_vector, notification: Notification::Terminate}).unwrap();        
+            match sender.send(NotifyNode {buff: my_vector, notification: Notification::Terminate}) {
+                Ok(_) => {},
+                Err(e) => {warn!("{:?} sent through the channel didn't reach the receiver\nReason: {}",Notification::Terminate,e.to_string())},
+            }; 
         },
         Time_Verification_Status::Insufficient_Proofs => {/*Do nothing*/}
     }
 }
 
 fn verify_time_challenge_bound() -> Time_Verification_Status{
-    return Time_Verification_Status::Insufficient_Proofs;
+    return Time_Verification_Status::Incorrect;
 }
 
 ///Verify some of the proofs: generate the seed correspondent to all the proofs. 

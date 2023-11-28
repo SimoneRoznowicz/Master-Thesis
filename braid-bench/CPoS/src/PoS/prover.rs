@@ -13,7 +13,7 @@ use log::{info, error, debug, trace, warn};
 
 use crate::block_generation::encoder::generate_block;
 use crate::block_generation::utils::Utils::{MAX_NUM_PROOFS, BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_PER_UNIT};
-use crate::communication::client::{send_msg_prover};
+use crate::communication::client::{send_msg_prover, send_msg};
 use crate::communication::handle_prover::random_path_generator;
 use crate::communication::structs::Notification;
 use crate::block_generation::blockgen::{self, BlockGroup};
@@ -25,7 +25,7 @@ use super::verifier;
 pub struct Prover {
     address: String,
     verifier_address: String,
-    stream_opt: Arc<Mutex<Option<TcpStream>>>,
+    stream_opt: Option<TcpStream>,
     unit: Vec<BlockGroup>,   //maybe then you should substitute this BlockGroup with a File
     seed: u8
 }
@@ -59,7 +59,7 @@ impl Prover {
                     //let mut file = File::create("serailized_file.bin").unwrap();
         //file.write_all(&encoded)?;
                     //file.write_all(&enc_slice);
-        let stream: Arc<Mutex<Option<TcpStream>>> = Arc::new(Mutex::new(None));
+        let stream: Option<TcpStream> = None;
         let mut this = Self {
             address,
             verifier_address,
@@ -77,18 +77,19 @@ impl Prover {
         info!("Prover server listening on address {}", self.address);
         let listener = TcpListener::bind(&self.address).unwrap();
         let mut stream = listener.accept().unwrap().0;
-        let mut shared_stream = Arc::new(Mutex::new(Some(stream)));
-        self.stream_opt = shared_stream;
+        self.stream_opt = Some(stream.try_clone().unwrap());
+         
         //let read_stream = Arc::clone(&shared_stream);
         //let write_stream = Arc::clone(&shared_stream);
 
         //clone self strema
-        let mut stream_clone = self.stream_opt.clone();//stream.try_clone().unwrap();
+        //let mut stream_clone = Some(self.stream_opt.unwrap().try_clone().unwrap());//stream.try_clone().unwrap();
 
         thread::spawn(move || {
             loop{   //secondo me in qualche modo non rilascia qua
                 //trace!("Started loop in prover");
                 let sender_clone = sender.clone();
+                let mut stream_clone = stream.try_clone().unwrap();
                 //info!("New connection: {}", stream.peer_addr().unwrap());
                 let mut data = [0; 128]; // Use a smaller buffer size
                 let retrieved_data = handle_stream(&mut stream_clone, &mut data);
@@ -102,17 +103,14 @@ impl Prover {
         let mut is_started = false;
         // while counter < MAX_NUM_PROOFS {
         loop{
-            debug!("Loop Started Prover");
             match receiver.try_recv() {  //PROBLEMA: QUA SI FERMA SEMPRE. MI SERVIREBBE UNA NOTIFICA CONTINUE A OGNI CICLO. INVECE IO VORREI UNA NOTIFICA STOP QUANDO SERVE E NEL RESTO DEL TEMPO RIMANE CONTINUE
                 Ok(notify_node) => {
                     match notify_node.notification {
                         Notification::Start => {
-                            warn!("Start notification received");
-                            self.seed = notify_node.buff[1];
-                            warn!("seed stored in prover");
-                            let mut stream = self.stream_opt.clone();
-                            create_and_send_proof_batches(&stream, self.seed, &receiver);
                             is_started = true;
+                            info!("Start Notification received");
+                            self.seed = notify_node.buff[1];
+                            create_and_send_proof_batches(&self.stream_opt, self.seed, &receiver);
                         }
                         Notification::Stop => {
                             info!("Received Stop signal: the prover stopped sending proof batches");
@@ -122,10 +120,10 @@ impl Prover {
                     }
                 }
                 Err(TryRecvError::Empty) => {
-                    if(!is_started){
-                        info!("In TryRecvError::Empty send batches");
+                    if(is_started){
                         create_and_send_proof_batches(&self.stream_opt, self.seed, &receiver);
                     }
+                    warn!("In TryRecvError::Empty send batches");
                 }
                 Err(TryRecvError::Disconnected) => {
                     error!("The prover has been disconnected");
@@ -134,26 +132,29 @@ impl Prover {
             }
             counter += BATCH_SIZE*10;
         }
-        warn!("ARRIVED AT END OF LOOP");
+        info!("ARRIVED AT END OF LOOP");
     }
 }
 
 pub fn stop_sending_proofs(sender: &Sender<NotifyNode>) {
-    sender.send(NotifyNode {buff: Vec::new(), notification: Notification::Stop}).unwrap();
+    match sender.send(NotifyNode {buff: Vec::new(), notification: Notification::Stop}) {
+        Ok(_) => {},
+        Err(_) => {warn!("This stop Notification not received")},
+    };
 }
 
-pub fn handle_stream<'a>(stream_opt: &Arc<Mutex<Option<TcpStream>>>, data: &'a mut [u8]) -> &'a[u8] {
-    let mut stream_opt_clone = stream_opt.clone();
-    let mut locked_stream = stream_opt_clone.lock().unwrap();//stream_opt.lock().unwrap().as_ref().clone();
+pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a[u8] {
+    // let mut stream_opt_clone = stream_opt.clone();
+    // let mut locked_stream = stream_opt_clone.lock().unwrap();//stream_opt.lock().unwrap().as_ref().clone();
     warn!("After locking stream in read");
-    match locked_stream.as_ref().unwrap().read(data) {
+    match stream.read(data) {
         Ok(_) => {
             warn!("Going to unlock stream in reads");
             return &data[..];
         },
         Err(_) => {
             error!("An error occurred, terminating connection");
-            locked_stream.as_ref().unwrap().shutdown(Shutdown::Both).unwrap();
+            stream.shutdown(Shutdown::Both);
             return &[];
         }
     }
@@ -181,29 +182,23 @@ pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
 
 
 
-
-
-
 pub fn read_byte_from_file() -> u8 {
     return 0;
 }
 
-pub fn create_and_send_proof_batches(stream: &Arc<Mutex<Option<TcpStream>>>, seed: u8, receiver: &mpsc::Receiver<NotifyNode>) {
+pub fn create_and_send_proof_batches(stream: &Option<TcpStream>, seed: u8, receiver: &Receiver<NotifyNode>) {
     let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
     let mut position: u32 = INITIAL_POSITION;  // Given parameter
     let mut proof_batch: [u8;BATCH_SIZE] = [0;BATCH_SIZE];
     warn!("Prepared batch of proofs...");
     for mut iteration_c in 0..proof_batch.len() {
-        warn!("Iteration == {}", iteration_c);
         (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
         proof_batch[iteration_c] = read_byte_from_file();
     }
     let mut response_msg: [u8; BATCH_SIZE+1] = [1; BATCH_SIZE+1];
     //the tag is 1 
     response_msg[1..].copy_from_slice(&proof_batch);
-    //let my_slice: &[u8] = &response_msg;
-    //debug!("IN PROVER MSG[0] ==  {}",my_slice[0]);
     warn!("Before send_msg_prover");
-    send_msg_prover(stream, &response_msg);
+    send_msg(stream.as_ref().unwrap(), &response_msg);
     warn!("Batch of proofs sent from prover to verifier");
 }
