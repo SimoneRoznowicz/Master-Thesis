@@ -136,6 +136,7 @@ impl Verifier {
 
 
 fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u8>, sender: &Sender<NotifyNode>) {
+    return;
     //Update vector of proofs
     proofs.extend(new_proofs);
     sender.send(NotifyNode {buff: new_proofs.to_vec(), notification: Notification::Update}).unwrap();

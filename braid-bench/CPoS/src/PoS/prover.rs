@@ -86,7 +86,7 @@ impl Prover {
         let mut stream_clone = self.stream_opt.clone();//stream.try_clone().unwrap();
 
         thread::spawn(move || {
-            loop{
+            loop{   //secondo me in qualche modo non rilascia qua
                 //trace!("Started loop in prover");
                 let sender_clone = sender.clone();
                 //info!("New connection: {}", stream.peer_addr().unwrap());
@@ -143,20 +143,20 @@ pub fn stop_sending_proofs(sender: &Sender<NotifyNode>) {
 }
 
 pub fn handle_stream<'a>(stream_opt: &Arc<Mutex<Option<TcpStream>>>, data: &'a mut [u8]) -> &'a[u8] {
-    let mut locked_stream = stream_opt.lock().unwrap();//stream_opt.lock().unwrap().as_ref().clone();
+    let mut stream_opt_clone = stream_opt.clone();
+    let mut locked_stream = stream_opt_clone.lock().unwrap();//stream_opt.lock().unwrap().as_ref().clone();
     warn!("After locking stream in read");
     match locked_stream.as_ref().unwrap().read(data) {
-        Ok(size) => {
-            return &data[..size];
+        Ok(_) => {
+            warn!("Going to unlock stream in reads");
+            return &data[..];
         },
         Err(_) => {
-           // error!("An error occurred, terminating connection with {}", locked_stream.peer_addr().unwrap());
+            error!("An error occurred, terminating connection");
             locked_stream.as_ref().unwrap().shutdown(Shutdown::Both).unwrap();
             return &[];
         }
     }
-    warn!("Going to unlock stream in reads");
-
 }
 
 pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
