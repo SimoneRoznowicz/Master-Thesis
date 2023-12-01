@@ -36,7 +36,7 @@ impl Prover {
         //channel to allow the verifier threads communicate with the main thread
         let sender: Sender<NotifyNode>;
         let receiver: Receiver<NotifyNode>;
-        (sender,receiver) = mpsc::channel();
+        (sender,receiver) = channel();
 
         let mut verifier = Prover::new(address, prover_address, sender);
 
@@ -116,7 +116,10 @@ impl Prover {
                             info!("Received Stop signal: the prover stopped sending proof batches");
                             break;
                         }
-                        _ => {error!("unexpected notification received")}
+                        Notification::Create_Inclusion_Proofs => {
+                            create_inclusion_proofs(&self.stream_opt, &notify_node.buff);
+                        },
+                        _ => {error!("Unexpected notification received: {:?}", notify_node.notification)}
                     }
                 }
                 Err(TryRecvError::Empty) => {
@@ -130,17 +133,10 @@ impl Prover {
                     break;
                 }
             }
-            counter += BATCH_SIZE*10;
+            //counter += BATCH_SIZE*10;
         }
         info!("ARRIVED AT END OF LOOP");
     }
-}
-
-pub fn stop_sending_proofs(sender: &Sender<NotifyNode>) {
-    match sender.send(NotifyNode {buff: Vec::new(), notification: Notification::Stop}) {
-        Ok(_) => {},
-        Err(_) => {warn!("This stop Notification not received")},
-    };
 }
 
 pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a[u8] {
@@ -160,18 +156,44 @@ pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a[u8] 
     }
 }
 
+pub fn send_stop_notification(sender: &Sender<NotifyNode>) {
+    match sender.send(NotifyNode {buff: Vec::new(), notification: Notification::Stop}) {
+        Ok(_) => {},
+        Err(_) => {warn!("This stop Notification was not received")},
+    };
+}
+
+pub fn send_start_notification(msg: &[u8], sender: &Sender<NotifyNode>) {
+    match sender.send(NotifyNode {buff: msg.to_vec(), notification: Notification::Start}) {
+        Ok(_) => {},
+        Err(_) => {warn!("This start Notification was not received")},
+    };
+}
+
+pub fn send_create_inclusion_proofs(msg: &[u8], sender: &Sender<NotifyNode>) {
+    match sender.send(NotifyNode {buff: msg.to_vec(), notification: Notification::Create_Inclusion_Proofs}) {
+        Ok(_) => {},
+        Err(_) => {warn!("This start Notification was not received")},
+    };
+}
+
 pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
     let tag = msg[0];
     debug!("msg == {}", msg[0]);
     if (tag == 0){
         //Notify the main thread to start creating proof 
         trace!("In prover the tag is 0");
-        sender.send(NotifyNode { buff: msg.to_vec(), notification: Notification::Start}).unwrap();
+        send_start_notification(msg, &sender);
     }
     else if (tag == 2){
         //Notify the main thread to stop creating proofs
         trace!("In prover the tag is 2");
-        stop_sending_proofs(&sender);            
+        send_stop_notification(&sender);            
+    }
+    else if (tag == 3){
+        //Notify the main thread to start creating inclusion proofs 
+        trace!("In prover the tag is 3");
+        send_create_inclusion_proofs(msg, &sender);
     }
     else{
         error!("In prover the tag is NOT 0 and NOT 2: the tag is {}", tag)
@@ -201,4 +223,24 @@ pub fn create_and_send_proof_batches(stream: &Option<TcpStream>, seed: u8, recei
     warn!("Before send_msg_prover");
     send_msg(stream.as_ref().unwrap(), &response_msg);
     warn!("Batch of proofs sent from prover to verifier");
+}
+
+
+pub fn create_inclusion_proofs(stream: &Option<TcpStream>, msg: &[u8]) {
+    let mut indexes_vector: Vec<u32> = Vec::new();
+    let mut i=0;
+    while(i<msg.len()){
+        let mut index_array: [u8; 4] = [0; 4];
+        index_array.copy_from_slice(&msg[1+i..1+i+4]);    
+        let retrieved_indx = u32::from_be_bytes(index_array);
+        indexes_vector.push(retrieved_indx);
+        i += 4;
+    }
+    for indx in &indexes_vector {
+        generate_send_inclusion_proof(stream,&indexes_vector);
+    }
+}
+
+pub fn generate_send_inclusion_proof(stream: &Option<TcpStream>, indexes_vector: &Vec<u32>) {
+    todo!()
 }

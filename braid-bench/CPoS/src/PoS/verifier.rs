@@ -2,7 +2,7 @@ use std::{str::Bytes, net::{TcpStream, Shutdown, TcpListener}, collections::hash
 use log::{info,error, warn, debug, trace};
 use rand::{Rng, seq::SliceRandom};
 
-use crate::{communication::{client::{send_msg},structs::{Notification, Fairness, Verification_Status, Failure_Reason, Time_Verification_Status}, handle_prover::random_path_generator}, block_generation::utils::Utils::{INITIAL_POSITION, INITIAL_BLOCK_ID, BATCH_SIZE, NUM_BLOCK_PER_UNIT, NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY, MAX_NUM_PROOFS}};
+use crate::{communication::{client::{send_msg},structs::{Notification, Fairness, Verification_Status, Failure_Reason, Time_Verification_Status}, handle_prover::random_path_generator}, block_generation::{utils::Utils::{INITIAL_POSITION, INITIAL_BLOCK_ID, BATCH_SIZE, NUM_BLOCK_PER_UNIT, NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY, MAX_NUM_PROOFS, CHECKING_FACTOR}, encoder::generate_block, blockgen::BlockGroup}};
 
 use super::structs::NotifyNode;
 
@@ -12,7 +12,7 @@ pub struct Verifier {
     seed: u8,
     stream: TcpStream,
     proofs: Vec<u8>,
-    status: (Verification_Status,Fairness)  //
+    status: (Verification_Status,Fairness)  
 }
 
 impl Verifier {
@@ -36,8 +36,7 @@ impl Verifier {
         //let mut stream: Option<TcpStream> = None;
         let stream_option = TcpStream::connect(prover_address.clone());
         match &stream_option {
-            Ok(stream) => {info!("Connection from verifier at {} and Prover at {} successfully created 
-            ||\nConnection from verifier at {} and Prover at {} successfully created ",address, prover_address,&stream.local_addr().unwrap(),&stream.peer_addr().unwrap())},
+            Ok(stream) => {info!("\nConnection from verifier at {} and Prover at {} successfully created ",&stream.local_addr().unwrap(),&stream.peer_addr().unwrap())},
             Err(_) => {error!("Error in connection")},
         };
         let stream = stream_option.unwrap();
@@ -67,42 +66,48 @@ impl Verifier {
     }
 
     fn main_handler(&mut self, receiver: &Receiver<NotifyNode>, sender: &Sender<NotifyNode>){
-        let mut is_to_verify = true;
+        let mut is_to_challenge = true;
+        let mut is_to_verify = false;
         let mut is_stopped = false;
         loop {
-            if is_to_verify {
+            if is_to_challenge {
+                is_to_challenge = false;
                 info!("Verifier prepares the challenge");
                 self.challenge();
             }
             info!("Before Recv");
-            let mut my_thread: Option<JoinHandle<()>> = None;
             match receiver.recv() {
                 Ok(notify_node) => {
                     match notify_node.notification {
                         Notification::Verification_Time => {
-                            let stream_clone = self.stream.try_clone().unwrap();
-                            let sender_clone = sender.clone();        
-                            let mut proofs_clone = self.proofs.clone();
-                            my_thread = Some(thread::spawn(move || {
-                                if is_stopped == false {
-                                    info!("Verifiier received notification: Verification");
-                                    handle_verification(&stream_clone, &notify_node.buff, &mut proofs_clone, &sender_clone);
-                                }
-                                else{
-                                    info!("Received notification Verification but this is not required at this point");
-                                }
-                            }));
+                            if is_to_verify {
+                                let stream_clone = self.stream.try_clone().unwrap();
+                                let sender_clone = sender.clone();        
+                                let mut proofs_clone = self.proofs.clone();
+                                Some(thread::spawn(move || {
+                                    if is_stopped == false {
+                                        info!("Verifiier received notification: Verification");
+                                        handle_verification(&stream_clone, &notify_node.buff, &mut proofs_clone, &sender_clone);
+                                    }
+                                    else{
+                                        info!("Received notification Verification but this is not required at this point");
+                                    }
+                                }));
+                            }
                         },
                         Notification::Verification_Correctness => {
-                            let mut proofs_clone = self.proofs.clone();
+                            is_to_verify = false;
+                            let seed_clone = self.seed.clone();
+                            let stream_clone = self.stream.try_clone().unwrap();
                             thread::spawn(move || {
-                                verify_proofs(&proofs_clone);
+                                verify_correctness_proofs(&stream_clone,&notify_node.buff,seed_clone);
                             });
                         },
                         Notification::Update => {
                             self.proofs.extend(notify_node.buff);
                         },
-                        Notification::Terminate => { 
+                        Notification::Terminate => {
+                            is_to_verify = false;
                             let is_fair: Fairness;
                             //0-->Fair; 1-->Unfair(Time Reason); 2-->Unfair(Correctness Reason)
                             if (notify_node.buff[0] == 0) {is_fair = Fairness::Fair} 
@@ -118,7 +123,7 @@ impl Verifier {
                 },
                 Err(e) => {warn!("Error == {}", e)}
             }
-            is_to_verify = false;
+            
         }
         thread::sleep(Duration::from_secs(5));
     }
@@ -174,20 +179,59 @@ fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u
 }
 
 fn verify_time_challenge_bound() -> Time_Verification_Status{
+
     return Time_Verification_Status::Incorrect;
 }
 
-///Verify some of the proofs: generate the seed correspondent to all the proofs. 
-fn verify_proofs(msg: &[u8]) -> bool {
-    let mut rng = rand::thread_rng();
-    let mut shuffled_elements: Vec<u8> = msg.to_vec();
-    shuffled_elements.shuffle(&mut rng);
+//Verify some of the proofs: generate the seed correspondent to all the proofs. 
 
-    for i in 0..NUM_PROOFS_TO_VERIFY {
-        if(!sample_generate_verify(msg,i)){
-            return false;
-        };
+//[0,*1,2,*3,4,5,*6,*7,8,*9]
+//[1,2,3,4,5]
+//update eg.  i = i + (1/3)*10
+//update i = i + (% of samples I want to test) * (length of proof vector)
+fn verify_correctness_proofs(stream: &TcpStream, msg: &[u8], seed: u8) -> bool {
+    let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
+    let mut position: u32 = INITIAL_POSITION;  //Given parameter
+    let seed = msg[1];  //sbagliato lo devi prendere da self il seed
+    let mut seed_sequence: Vec<(u32, u32)> = vec![];
+
+    for i in 0..msg.len() {        
+        for mut iteration_c in 0..msg.len() {
+            (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
+            seed_sequence.push((block_id,position));
+        }
+        // if(!sample_generate_verify(msg,i.try_into().unwrap())){
+        //     return false;
+        // };
     }
+    let mut i: u32 = 0;
+    let proofs_len = msg.len() as u32;
+    let avg_step = (CHECKING_FACTOR * proofs_len as f32).round() as i32;
+    let random_step = rand::thread_rng().gen_range(-avg_step+1..=avg_step-1);
+
+    let mut all_verified_indexes: Vec<u8> = Vec::new();
+    all_verified_indexes.push(3);   //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
+    while(i<msg.len() as u32){
+        if !check_block(seed_sequence[i as usize].0,seed_sequence[i as usize].1){
+            return false;
+        }
+
+        //send request Merkle Tree for each of the proof: send tag 3 followed by the indexes
+        all_verified_indexes.push((i >> 24) as u8);
+        all_verified_indexes.push((i >> 16) as u8);
+        all_verified_indexes.push((i >> 8) as u8);
+        all_verified_indexes.push(i as u8);
+        i = i + ((avg_step + random_step) as u32);
+    }
+
+    send_msg(stream, &all_verified_indexes);
+
+    return true;
+}
+
+fn check_block(block_id: u32, pos_in_block: u32) -> bool{
+    //TODO
+    let block = generate_block(block_id.try_into().unwrap());
     return true;
 }
 
@@ -195,6 +239,7 @@ fn sample_generate_verify(msg: &[u8], i: u32) -> bool {
     let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
     let mut position: u32 = INITIAL_POSITION;  //Given parameter
     let seed = msg[1];  //sbagliato lo devi prendere da self il seed
+
     let proof_batch: [u8;BATCH_SIZE] = [0;BATCH_SIZE];
     let mut seed_sequence: Vec<(u32, u32)> = vec![];
     for mut iteration_c in 0..proof_batch.len() {
@@ -225,7 +270,7 @@ fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
     debug!("Tag in verifier is == {}", msg[0]);
     if tag == 1 {
         debug!("Thread in verifier notified of the new buffer. Send for verification to the main thread");
-        let vec = msg.to_vec();
+        let vec = msg[1..].to_vec();
         match sender.send(NotifyNode{ buff: vec.clone(), notification: Notification::Verification_Time }) {
             Ok(_) => {debug!("good send to main")},
             Err(e) => {debug!("error first send channel == {}",e)},
