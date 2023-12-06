@@ -1,8 +1,8 @@
-use std::{str::Bytes, net::{TcpStream, Shutdown, TcpListener}, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, sync::mpsc::{self, Sender, Receiver}, io::Read, thread::{self, Thread, JoinHandle}, vec, time::Duration};
+use std::{str::Bytes, net::{TcpStream, Shutdown, TcpListener}, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, sync::mpsc::{self, Sender, Receiver}, io::Read, thread::{self, Thread, JoinHandle}, vec, time::Duration, intrinsics::mir::Deinit};
 use log::{info,error, warn, debug, trace};
 use rand::{Rng, seq::SliceRandom};
 
-use crate::{communication::{client::{send_msg},structs::{Notification, Fairness, Verification_Status, Failure_Reason, Time_Verification_Status}, handle_prover::random_path_generator}, block_generation::{utils::Utils::{INITIAL_POSITION, INITIAL_BLOCK_ID, BATCH_SIZE, NUM_BLOCK_PER_UNIT, NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY, MAX_NUM_PROOFS, CHECKING_FACTOR}, encoder::generate_block, blockgen::BlockGroup}, Merkle_Tree::{mpt::MerkleTree, structs::Proof}};
+use crate::{communication::{client::{send_msg},structs::{Notification, Fairness, Verification_Status, Failure_Reason, Time_Verification_Status}, handle_prover::random_path_generator}, block_generation::{utils::Utils::{INITIAL_POSITION, INITIAL_BLOCK_ID, BATCH_SIZE, NUM_BLOCK_PER_UNIT, NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY, MAX_NUM_PROOFS, CHECKING_FACTOR}, encoder::generate_block, blockgen::BlockGroup}, Merkle_Tree::{mpt::{MerkleTree, from_bytes_to_proof}, structs::{Proof, Id}, client_verify::get_root_hash}};
 
 use super::structs::NotifyNode;
 
@@ -12,6 +12,7 @@ pub struct Verifier {
     seed: u8,
     stream: TcpStream,
     proofs: Vec<u8>,
+    is_fair: bool,
     status: (Verification_Status,Fairness)  
 }
 
@@ -42,12 +43,14 @@ impl Verifier {
         let stream = stream_option.unwrap();
         let mut proofs: Vec<u8> = Vec::new();
         let mut status = (Verification_Status::Executing,Fairness::Undecided);
+        let is_fair = true;
         let mut this = Self {
             address,
             prover_address,
             seed,
             stream,
             proofs,
+            is_fair,
             status,
         };
         this.start_server(sender);
@@ -107,7 +110,15 @@ impl Verifier {
                             //handle_inclusion_proof();
                         }
                         Notification::Update => {
-                            self.proofs.extend(notify_node.buff);
+                            if notify_node.buff[0] == 0 {
+                                self.proofs.extend(notify_node.buff);
+                            } else {
+                                if(notify_node.buff[1] == 1){
+                                    self.is_fair = false;
+                                    let terminate_vector = vec![2];  //Unfair(Time Reason)
+                                    sender.send(NotifyNode {buff: terminate_vector, notification: Notification::Terminate});
+                                }
+                            }
                         },
                         Notification::Terminate => {
                             is_to_verify = false;
@@ -155,7 +166,10 @@ fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u
     //note that new_proofs e proofs hanno gia rimosso il primo byte del tag
     //Update vector of proofs
     proofs.extend(new_proofs);
-    sender.send(NotifyNode {buff: new_proofs.to_vec(), notification: Notification::Update}).unwrap();
+    let mut update_new_proofs = Vec::new();
+    update_new_proofs.push(0);
+    update_new_proofs.extend_from_slice(new_proofs);
+    sender.send(NotifyNode {buff: update_new_proofs, notification: Notification::Update}).unwrap();
     //verify_time_challenge_bound() should return three cases: 
     //Still not verified
     //Verified Correct (we can proceed to verify the correctness of the proofs)
@@ -172,8 +186,8 @@ fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u
         Time_Verification_Status::Incorrect => {
             send_stop_msg(stream);
             info!("Terminating Verification: the time bound was not satisfied by the prover");
-            let my_vector = vec![1];  //Unfair(Time Reason)
-            match sender.send(NotifyNode {buff: my_vector, notification: Notification::Terminate}) {
+            let terminate_vector = vec![1];  //Unfair(Time Reason)
+            match sender.send(NotifyNode {buff: terminate_vector, notification: Notification::Terminate}) {
                 Ok(_) => {},
                 Err(e) => {warn!("{:?} sent through the channel didn't reach the receiver\nReason: {}",Notification::Terminate,e.to_string())},
             }; 
@@ -182,8 +196,21 @@ fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u
     }
 }
 
-fn handle_inclusion_proof(stream: &TcpStream, proof: Proof, sender: &Sender<NotifyNode>) {
-    
+fn handle_inclusion_proof(stream: &TcpStream, bytes_proof: &[u8], sender: &Sender<NotifyNode>) {
+    let proof = from_bytes_to_proof(bytes_proof.to_vec());
+    let byte_value: u8 = 0;
+    let byte_position: u8 = 0;
+    let hash_retrieved = get_root_hash::<u8,u8>(proof, byte_value, Id::<u8>::new(byte_position));
+    let stored_root_hash = hash_retrieved.clone();
+    let mut correctness_flag = 1; //false
+    if(hash_retrieved.eq(&stored_root_hash)){
+        correctness_flag = 0; //true
+    }
+    let mut update_new_proofs = Vec::new();
+    update_new_proofs.push(1);
+    update_new_proofs.push(correctness_flag);
+
+    sender.send(NotifyNode {buff: update_new_proofs, notification: Notification::Update}).unwrap();
 }
 
 fn verify_time_challenge_bound() -> Time_Verification_Status{
