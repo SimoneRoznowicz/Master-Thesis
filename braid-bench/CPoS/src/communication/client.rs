@@ -7,6 +7,7 @@ extern crate env_logger;
 use log::{info,error,warn};
 
 
+
 pub fn send_msg(mut stream: &TcpStream, msg: &[u8]) {
     match stream.write(msg) {
         Ok(_) => {

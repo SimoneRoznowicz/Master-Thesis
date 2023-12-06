@@ -1,14 +1,16 @@
 mod communication;
 mod PoS;
 mod block_generation;
-
+mod Merkle_Tree;
 
 extern crate log;
 extern crate env_logger;
 
 use std::thread;
 use std::time::Duration;
-use log::info;
+use log::info; 
+// use first_rust_project::Direction;
+
 
 use crate::PoS::verifier::Verifier;
 //use crate::communication::server::start_server;
@@ -30,10 +32,9 @@ fn set_logger(){
 // }
 
 fn main() {
-
     set_logger();
     //challenge: send 1(tag) + 1(seed)
-    // let data: [u8, 5]= [255, 1, 7];
+    //let data: [u8, 5]= [255, 1, 7];
     let data: [u8; 3] = [255, 20, 30];
 
     let pub_hash = blake3::hash(b"HELLO");

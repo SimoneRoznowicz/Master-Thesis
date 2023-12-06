@@ -8,8 +8,11 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::channel;
 use std::thread::{self, Thread};
 
+
 use aes::Block;
 use log::{info, error, debug, trace, warn};
+// use first_rust_project::src;
+
 
 use crate::block_generation::encoder::generate_block;
 use crate::block_generation::utils::Utils::{MAX_NUM_PROOFS, BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_PER_UNIT};
@@ -31,7 +34,6 @@ pub struct Prover {
 }
 
 impl Prover {
-
     pub fn start(address: String, prover_address: String){
         //channel to allow the verifier threads communicate with the main thread
         let sender: Sender<NotifyNode>;
@@ -117,7 +119,7 @@ impl Prover {
                             break;
                         }
                         Notification::Create_Inclusion_Proofs => {
-                            create_inclusion_proofs(&self.stream_opt, &notify_node.buff);
+                            self.create_inclusion_proofs(&self.stream_opt, &notify_node.buff);
                         },
                         _ => {error!("Unexpected notification received: {:?}", notify_node.notification)}
                     }
@@ -137,7 +139,29 @@ impl Prover {
         }
         info!("ARRIVED AT END OF LOOP");
     }
+
+    pub fn create_inclusion_proofs(&self, stream: &Option<TcpStream>, msg: &[u8]) {
+        let mut indexes_vector: Vec<u32> = Vec::new();
+        let mut i=0;
+        while(i<msg.len()){
+            let mut index_array: [u8; 4] = [0; 4];
+            index_array.copy_from_slice(&msg[1+i..1+i+4]);    
+            let retrieved_indx = u32::from_be_bytes(index_array);
+            indexes_vector.push(retrieved_indx);
+            i += 4;
+        }
+        for indx in &indexes_vector {
+            self.generate_send_inclusion_proof(stream,*indx,&indexes_vector);
+        }
+    }
+    
+    pub fn generate_send_inclusion_proof(&self, stream: &Option<TcpStream>, indx: u32, indexes_vector: &Vec<u32>) {
+        //prendi il progetto tuo di Merkle Tree. Qui, selezionato un block_id (ovvero index_vectr[indx]), 
+        //usi per ogni leaf come chiave k la posizione del block e come V il corrisponente u8
+        let unit = &self.unit;
+    }
 }
+
 
 pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a[u8] {
     // let mut stream_opt_clone = stream_opt.clone();
@@ -223,24 +247,4 @@ pub fn create_and_send_proof_batches(stream: &Option<TcpStream>, seed: u8, recei
     warn!("Before send_msg_prover");
     send_msg(stream.as_ref().unwrap(), &response_msg);
     warn!("Batch of proofs sent from prover to verifier");
-}
-
-
-pub fn create_inclusion_proofs(stream: &Option<TcpStream>, msg: &[u8]) {
-    let mut indexes_vector: Vec<u32> = Vec::new();
-    let mut i=0;
-    while(i<msg.len()){
-        let mut index_array: [u8; 4] = [0; 4];
-        index_array.copy_from_slice(&msg[1+i..1+i+4]);    
-        let retrieved_indx = u32::from_be_bytes(index_array);
-        indexes_vector.push(retrieved_indx);
-        i += 4;
-    }
-    for indx in &indexes_vector {
-        generate_send_inclusion_proof(stream,&indexes_vector);
-    }
-}
-
-pub fn generate_send_inclusion_proof(stream: &Option<TcpStream>, indexes_vector: &Vec<u32>) {
-    todo!()
 }

@@ -6,6 +6,7 @@ pub enum Notification {
     Verification_Time,
     Verification_Correctness,
     Create_Inclusion_Proofs,
+    Handle_Inclusion_Proof,
     Terminate,
 }
 

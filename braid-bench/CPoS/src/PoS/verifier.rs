@@ -2,7 +2,7 @@ use std::{str::Bytes, net::{TcpStream, Shutdown, TcpListener}, collections::hash
 use log::{info,error, warn, debug, trace};
 use rand::{Rng, seq::SliceRandom};
 
-use crate::{communication::{client::{send_msg},structs::{Notification, Fairness, Verification_Status, Failure_Reason, Time_Verification_Status}, handle_prover::random_path_generator}, block_generation::{utils::Utils::{INITIAL_POSITION, INITIAL_BLOCK_ID, BATCH_SIZE, NUM_BLOCK_PER_UNIT, NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY, MAX_NUM_PROOFS, CHECKING_FACTOR}, encoder::generate_block, blockgen::BlockGroup}};
+use crate::{communication::{client::{send_msg},structs::{Notification, Fairness, Verification_Status, Failure_Reason, Time_Verification_Status}, handle_prover::random_path_generator}, block_generation::{utils::Utils::{INITIAL_POSITION, INITIAL_BLOCK_ID, BATCH_SIZE, NUM_BLOCK_PER_UNIT, NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY, MAX_NUM_PROOFS, CHECKING_FACTOR}, encoder::generate_block, blockgen::BlockGroup}, Merkle_Tree::{mpt::MerkleTree, structs::Proof}};
 
 use super::structs::NotifyNode;
 
@@ -103,6 +103,9 @@ impl Verifier {
                                 verify_correctness_proofs(&stream_clone,&notify_node.buff,seed_clone);
                             });
                         },
+                        Notification::Handle_Inclusion_Proof => {
+                            //handle_inclusion_proof();
+                        }
                         Notification::Update => {
                             self.proofs.extend(notify_node.buff);
                         },
@@ -149,6 +152,7 @@ fn send_stop_msg(stream: &TcpStream){
 }
 
 fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u8>, sender: &Sender<NotifyNode>) {
+    //note that new_proofs e proofs hanno gia rimosso il primo byte del tag
     //Update vector of proofs
     proofs.extend(new_proofs);
     sender.send(NotifyNode {buff: new_proofs.to_vec(), notification: Notification::Update}).unwrap();
@@ -178,8 +182,11 @@ fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u
     }
 }
 
-fn verify_time_challenge_bound() -> Time_Verification_Status{
+fn handle_inclusion_proof(stream: &TcpStream, proof: Proof, sender: &Sender<NotifyNode>) {
+    
+}
 
+fn verify_time_challenge_bound() -> Time_Verification_Status{
     return Time_Verification_Status::Incorrect;
 }
 
@@ -270,8 +277,14 @@ fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
     debug!("Tag in verifier is == {}", msg[0]);
     if tag == 1 {
         debug!("Thread in verifier notified of the new buffer. Send for verification to the main thread");
-        let vec = msg[1..].to_vec();
-        match sender.send(NotifyNode{ buff: vec.clone(), notification: Notification::Verification_Time }) {
+        match sender.send(NotifyNode{ buff: msg[1..].to_vec(), notification: Notification::Verification_Time }) {
+            Ok(_) => {debug!("good send to main")},
+            Err(e) => {debug!("error first send channel == {}",e)},
+        };
+    }
+    else if tag == 4 {
+        info!("Handle Verification of an Inclusion Proof");
+        match sender.send(NotifyNode{ buff: msg[1..].to_vec(), notification: Notification::Handle_Inclusion_Proof }) {
             Ok(_) => {debug!("good send to main")},
             Err(e) => {debug!("error first send channel == {}",e)},
         };
