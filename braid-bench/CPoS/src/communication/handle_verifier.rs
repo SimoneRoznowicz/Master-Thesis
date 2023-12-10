@@ -6,8 +6,8 @@ use aes::Block;
 use rand::seq::SliceRandom;
 
 use crate::block_generation::blockgen::block_gen;
-use crate::block_generation::encoder::generate_block;
-use crate::block_generation::utils::Utils::{NUM_PROOFS_TO_VERIFY, NUM_FRAGMENTS_PER_UNIT, NUM_BLOCK_PER_UNIT, INITIAL_BLOCK_ID, INITIAL_POSITION, BATCH_SIZE};
+use crate::block_generation::encoder::generate_block_group;
+use crate::block_generation::utils::Utils::{NUM_PROOFS_TO_VERIFY, NUM_FRAGMENTS_PER_UNIT, NUM_BLOCK_GROUPS_PER_UNIT, INITIAL_BLOCK_ID, INITIAL_POSITION, BATCH_SIZE};
 
 // pub fn handle_verification(msg: &[u8], stream: &TcpStream) -> bool {
 //     return verify_time_challenge_bound() && verify_proofs(msg, stream); //if the first is wrong, don't execute verify_proofs
@@ -62,7 +62,7 @@ pub fn random_path_generator(id: u32, c: usize, p: u32, s: u8) -> (u32,u32) {
     id.hash(&mut hasher_nxt_block);
     c.hash(&mut hasher_nxt_block);
     p.hash(&mut hasher_nxt_block);
-    let new_id = hasher_nxt_block.finish() % NUM_BLOCK_PER_UNIT as u64;
+    let new_id = hasher_nxt_block.finish() % NUM_BLOCK_GROUPS_PER_UNIT as u64;
 
     s.hash(&mut hasher_nxt_pos);
     id.hash(&mut hasher_nxt_pos);

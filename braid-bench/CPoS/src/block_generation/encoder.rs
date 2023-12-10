@@ -108,7 +108,7 @@ pub fn encode(mut input_file: File, mut output_file: File) -> io::Result<()> {
     Ok(())
 }
 
-pub fn generate_block(i: u64) -> BlockGroup {
+pub fn generate_block_group(i: u64) -> BlockGroup {
     let pub_hash = blake3::hash(ID_PUBLIC_KEY);
 
     let mut inits: InitGroup = [[0; GROUP_SIZE]; INIT_SIZE];

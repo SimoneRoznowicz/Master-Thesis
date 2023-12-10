@@ -1,7 +1,8 @@
-use std::fs::File;
-use std::io::{Read, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write, Seek, SeekFrom};
 use std::net::{TcpListener, Shutdown, TcpStream};
 use std::option;
+use std::os::windows::io::AsRawHandle;
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::mpsc::{Sender, self, TryRecvError};
 use std::sync::mpsc::Receiver;
@@ -14,12 +15,14 @@ use log::{info, error, debug, trace, warn};
 // use first_rust_project::src;
 
 
-use crate::block_generation::encoder::generate_block;
-use crate::block_generation::utils::Utils::{MAX_NUM_PROOFS, BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_PER_UNIT};
+use crate::Merkle_Tree::mpt::{MerkleTree, from_proof_to_bytes};
+use crate::Merkle_Tree::structs::Proof;
+use crate::block_generation::encoder::generate_block_group;
+use crate::block_generation::utils::Utils::{MAX_NUM_PROOFS, BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT};
 use crate::communication::client::{send_msg_prover, send_msg};
 use crate::communication::handle_prover::random_path_generator;
 use crate::communication::structs::Notification;
-use crate::block_generation::blockgen::{self, BlockGroup};
+use crate::block_generation::blockgen::{self, BlockGroup, FragmentGroup};
 
 use super::structs::NotifyNode;
 use super::verifier;
@@ -29,8 +32,9 @@ pub struct Prover {
     address: String,
     verifier_address: String,
     stream_opt: Option<TcpStream>,
-    unit: Vec<BlockGroup>,   //maybe then you should substitute this BlockGroup with a File
-    seed: u8
+    //unit: Vec<FragmentGroup>,   //PROVVISORIO: POI VOGLIO AVERE SOLO UN FILE
+    seed: u8,
+    file: File,
 }
 
 impl Prover {
@@ -48,13 +52,39 @@ impl Prover {
 
     pub fn new(address: String, verifier_address: String, sender: Sender<NotifyNode>) -> Prover {
         debug!("beginning of new Prover");
-        let mut unit: Vec<BlockGroup> = Vec::new();
+        let mut unit: Vec<FragmentGroup> = Vec::new();
+        // let flattened_vector: Vec<u8> = block
+        //     .iter()
+        //     .flat_map(|&num| num.to_le_bytes().to_vec())
+        //     .collect();
 
-        for i in 0..NUM_BLOCK_PER_UNIT {
-            debug!("Before first block generate");
-            unit.push(generate_block(i));
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .read(true)
+            .write(true)
+            .open("test_main.bin").unwrap();
+
+        for i in 0..NUM_BLOCK_GROUPS_PER_UNIT {
+            let block_group = generate_block_group(i);
+            debug!("4 Blocks generated");
+            for block in block_group {
+                for bytes_fragment in block{
+                    let byte_fragment = bytes_fragment.to_le_bytes();
+                    file.write_all(&byte_fragment).unwrap();
+                }
+                unit.push(block);
+            }
         }
-        debug!("After block generation");
+        // file.seek(SeekFrom::Start(0)).unwrap();
+
+        let mut buffer = Vec::new();
+        match file.read_to_end(&mut buffer) {
+            Ok(_) => {},
+            Err(e) => {info!("error == {:?}", e)},
+        };
+        
+
         let mut encoded: Vec<u8> = bincode::serialize(&unit).unwrap();
         let enc_slice: &[u8] = encoded.as_mut_slice();
         // Write the serialized data to a file
@@ -66,8 +96,8 @@ impl Prover {
             address,
             verifier_address,
             stream_opt: stream,
-            unit,
-            seed: 0     //default value
+            seed: 0,     //default value
+            file,
         };
 
         this.start_server(sender);
@@ -81,12 +111,6 @@ impl Prover {
         let mut stream = listener.accept().unwrap().0;
         self.stream_opt = Some(stream.try_clone().unwrap());
          
-        //let read_stream = Arc::clone(&shared_stream);
-        //let write_stream = Arc::clone(&shared_stream);
-
-        //clone self strema
-        //let mut stream_clone = Some(self.stream_opt.unwrap().try_clone().unwrap());//stream.try_clone().unwrap();
-
         thread::spawn(move || {
             loop{   //secondo me in qualche modo non rilascia qua
                 //trace!("Started loop in prover");
@@ -119,13 +143,13 @@ impl Prover {
                             break;
                         }
                         Notification::Create_Inclusion_Proofs => {
-                            self.create_inclusion_proofs(&self.stream_opt, &notify_node.buff);
+                            self.create_inclusion_proofs(&notify_node.buff);
                         },
                         _ => {error!("Unexpected notification received: {:?}", notify_node.notification)}
                     }
                 }
                 Err(TryRecvError::Empty) => {
-                    if(is_started){
+                    if(is_started){ 
                         create_and_send_proof_batches(&self.stream_opt, self.seed, &receiver);
                     }
                     warn!("In TryRecvError::Empty send batches");
@@ -140,25 +164,53 @@ impl Prover {
         info!("ARRIVED AT END OF LOOP");
     }
 
-    pub fn create_inclusion_proofs(&self, stream: &Option<TcpStream>, msg: &[u8]) {
-        let mut indexes_vector: Vec<u32> = Vec::new();
-        let mut i=0;
+    pub fn create_inclusion_proofs(&mut self, msg: &[u8]) {
+        let mut block_id_vec: Vec<u32> = Vec::new();
+        let mut i = 0;
         while(i<msg.len()){
             let mut index_array: [u8; 4] = [0; 4];
             index_array.copy_from_slice(&msg[1+i..1+i+4]);    
-            let retrieved_indx = u32::from_be_bytes(index_array);
-            indexes_vector.push(retrieved_indx);
+            let retrieved_indx = u32::from_le_bytes(index_array);
+            block_id_vec.push(retrieved_indx);
             i += 4;
         }
-        for indx in &indexes_vector {
-            self.generate_send_inclusion_proof(stream,*indx,&indexes_vector);
+
+        //create Merkle Tree
+        //Store MT in self attributes
+        
+        for block_id in &block_id_vec {
+            let mut merkle_tree = self.generate_merkle_tree(*block_id);
+            // let proof = self.generate_inclusion_proof(&self.stream_opt,*block_id, &mut merkle_tree);
+            //SICCCOME LO STESSO BLOCK PUO ESSERE SCELTO PIU DI UNA VOLTA, CONVIENE CHE IL VERIFIER MANDI SIA IL BLOCKID CHE LA POSITION DA VERIFICARE!!!
+            //VEDI RIGA 225 DI VERIFIER.RS
+            let proof = todo!();//merkle_tree.prove(key);
+            //send root_hash + proof
+            let mut msg = from_proof_to_bytes(proof);   //cambia poi la funzione cosi ricevi come input &proof
+            let bytes_hash = merkle_tree.compute_hashes().to_bytes().as_slice();
+            msg.extend_from_slice(bytes_hash);
+            send_msg(&self.stream_opt.unwrap(), &msg);
         }
     }
+
+    pub fn generate_merkle_tree(&mut self, block_id: u32) -> MerkleTree<u32,u8> {
+        let mut merkle_tree = MerkleTree::<u32,u8>::new();
+        //QUA DOVRESTI ACCEDERE AL FILE E CREARE IL MT AGGIUNGENDO, PER OGNI INDICE, POSIZIONE DEL BYTE COME KEY E IL BYTE COME VALUE        
+        self.file.seek(SeekFrom::Start(block_id as u64 *32-1)).unwrap();  //beginning of the block number block_id
+        for i in 0..32 {
+            let mut buffer = [0; 1];
+            self.file.read_exact(&mut buffer).unwrap();
+            merkle_tree.insert(i,buffer[0]);      //Given a block: Key -> position (offset) of the byte in the block; Value -> value of the considered byte 
+        }
+        return merkle_tree;
+    }
     
-    pub fn generate_send_inclusion_proof(&self, stream: &Option<TcpStream>, indx: u32, indexes_vector: &Vec<u32>) {
-        //prendi il progetto tuo di Merkle Tree. Qui, selezionato un block_id (ovvero index_vectr[indx]), 
+    pub fn generate_inclusion_proof(&self, stream: &Option<TcpStream>, indx: u32, merkle_tree: &mut MerkleTree<u32,u8>) -> &Proof {
+        todo!();
+        //hai gia il MT. Solo genera la proof (per il byte nel block) e mandala
+        //
+        //prendi il progetto tuo di Merkle Tree. Qui, selezionato un block_id (indx), 
         //usi per ogni leaf come chiave k la posizione del block e come V il corrisponente u8
-        let unit = &self.unit;
+        //let unit = &self.unit;
     }
 }
 
@@ -197,7 +249,7 @@ pub fn send_start_notification(msg: &[u8], sender: &Sender<NotifyNode>) {
 pub fn send_create_inclusion_proofs(msg: &[u8], sender: &Sender<NotifyNode>) {
     match sender.send(NotifyNode {buff: msg.to_vec(), notification: Notification::Create_Inclusion_Proofs}) {
         Ok(_) => {},
-        Err(_) => {warn!("This start Notification was not received")},
+        Err(_) => {warn!("This Create_Inclusion_Proofs Notification was not received")},
     };
 }
 
@@ -236,15 +288,16 @@ pub fn create_and_send_proof_batches(stream: &Option<TcpStream>, seed: u8, recei
     let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
     let mut position: u32 = INITIAL_POSITION;  // Given parameter
     let mut proof_batch: [u8;BATCH_SIZE] = [0;BATCH_SIZE];
-    warn!("Prepared batch of proofs...");
-    for mut iteration_c in 0..proof_batch.len() {
+    debug!("Preparing batch of proofs.");
+
+    for iteration_c in 0..proof_batch.len() {
         (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
         proof_batch[iteration_c] = read_byte_from_file();
     }
     let mut response_msg: [u8; BATCH_SIZE+1] = [1; BATCH_SIZE+1];
     //the tag is 1 
     response_msg[1..].copy_from_slice(&proof_batch);
-    warn!("Before send_msg_prover");
+    debug!("Before send_msg_prover");
     send_msg(stream.as_ref().unwrap(), &response_msg);
-    warn!("Batch of proofs sent from prover to verifier");
+    debug!("Batch of proofs sent from prover to verifier");
 }

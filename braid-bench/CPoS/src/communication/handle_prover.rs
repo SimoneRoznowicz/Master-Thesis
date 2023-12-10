@@ -7,7 +7,7 @@ use log::{info,warn,error};
 
 use crate::block_generation::blockgen::SIZE;
 use crate::block_generation::utils;
-use crate::block_generation::utils::Utils::{BATCH_SIZE,NUM_BLOCK_PER_UNIT,NUM_FRAGMENTS_PER_UNIT,MAX_NUM_PROOFS,INITIAL_BLOCK_ID,INITIAL_POSITION};
+use crate::block_generation::utils::Utils::{BATCH_SIZE,NUM_BLOCK_GROUPS_PER_UNIT,NUM_FRAGMENTS_PER_UNIT,MAX_NUM_PROOFS,INITIAL_BLOCK_ID,INITIAL_POSITION};
 use crate::communication::structs::Notification;
 
 
@@ -70,7 +70,7 @@ pub fn random_path_generator(id: u32, c: usize, p: u32, s: u8) -> (u32,u32) {
     id.hash(&mut hasher_nxt_block);
     c.hash(&mut hasher_nxt_block);
     p.hash(&mut hasher_nxt_block);
-    let new_id = hasher_nxt_block.finish() % NUM_BLOCK_PER_UNIT as u64;
+    let new_id = hasher_nxt_block.finish() % NUM_BLOCK_GROUPS_PER_UNIT as u64;
 
     s.hash(&mut hasher_nxt_pos);
     id.hash(&mut hasher_nxt_pos);
