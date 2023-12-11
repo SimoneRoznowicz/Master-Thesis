@@ -18,7 +18,7 @@ use log::{info, error, debug, trace, warn};
 use crate::Merkle_Tree::mpt::{MerkleTree, from_proof_to_bytes};
 use crate::Merkle_Tree::structs::Proof;
 use crate::block_generation::encoder::generate_block_group;
-use crate::block_generation::utils::Utils::{MAX_NUM_PROOFS, BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT};
+use crate::block_generation::utils::Utils::{MAX_NUM_PROOFS, BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION};
 use crate::communication::client::{send_msg_prover, send_msg};
 use crate::communication::handle_prover::random_path_generator;
 use crate::communication::structs::Notification;
@@ -166,29 +166,34 @@ impl Prover {
 
     pub fn create_inclusion_proofs(&mut self, msg: &[u8]) {
         let mut block_id_vec: Vec<u32> = Vec::new();
-        let mut i = 0;
+        let mut position_vec: Vec<u32> = Vec::new();
+        let mut i = 1;
         while(i<msg.len()){
-            let mut index_array: [u8; 4] = [0; 4];
-            index_array.copy_from_slice(&msg[1+i..1+i+4]);    
+            let mut index_array: [u8; NUM_BYTES_PER_BLOCK_ID] = [0; NUM_BYTES_PER_BLOCK_ID];
+            index_array.copy_from_slice(&msg[i..i+NUM_BYTES_PER_BLOCK_ID]);
             let retrieved_indx = u32::from_le_bytes(index_array);
             block_id_vec.push(retrieved_indx);
-            i += 4;
+
+            let mut position_array: [u8; NUM_BYTES_PER_POSITION] = [0; NUM_BYTES_PER_POSITION];
+            position_array.copy_from_slice(&msg[i+NUM_BYTES_PER_BLOCK_ID..i+NUM_BYTES_PER_BLOCK_ID+NUM_BYTES_PER_POSITION]);
+            let retrieved_pos_indx = u32::from_le_bytes(position_array);
+            position_vec.push(retrieved_pos_indx);
+
+            i += NUM_BYTES_PER_BLOCK_ID + NUM_BYTES_PER_POSITION;
         }
 
         //create Merkle Tree
         //Store MT in self attributes
         
-        for block_id in &block_id_vec {
-            let mut merkle_tree = self.generate_merkle_tree(*block_id);
-            // let proof = self.generate_inclusion_proof(&self.stream_opt,*block_id, &mut merkle_tree);
-            //SICCCOME LO STESSO BLOCK PUO ESSERE SCELTO PIU DI UNA VOLTA, CONVIENE CHE IL VERIFIER MANDI SIA IL BLOCKID CHE LA POSITION DA VERIFICARE!!!
-            //VEDI RIGA 225 DI VERIFIER.RS
-            let proof = todo!();//merkle_tree.prove(key);
+        for (indx, block_id) in block_id_vec.iter().enumerate() {
             //send root_hash + proof
+            let mut merkle_tree = self.generate_merkle_tree(*block_id);
+            let proof = merkle_tree.prove(position_vec[indx]);
             let mut msg = from_proof_to_bytes(proof);   //cambia poi la funzione cosi ricevi come input &proof
-            let bytes_hash = merkle_tree.compute_hashes().to_bytes().as_slice();
-            msg.extend_from_slice(bytes_hash);
-            send_msg(&self.stream_opt.unwrap(), &msg);
+            let bytes_hash = merkle_tree.compute_hashes();
+
+            msg.extend_from_slice(bytes_hash.to_bytes().as_slice());
+            send_msg(&self.stream_opt.as_ref().unwrap(), &msg);
         }
     }
 

@@ -209,20 +209,21 @@ impl Verifier {
         let avg_step = (CHECKING_FACTOR * proofs_len as f32).round() as i32;
         let random_step = rand::thread_rng().gen_range(-avg_step+1..=avg_step-1);
 
-        let mut all_verified_indexes: Vec<u8> = Vec::new();
-        all_verified_indexes.push(3);   //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
-        while(i<msg.len() as u32){
+        let mut verified_blocks_and_positions: Vec<u8> = Vec::new();
+        verified_blocks_and_positions.push(3);   //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
+        while (i<msg.len() as u32){
             if !check_block(seed_sequence[i as usize].0,seed_sequence[i as usize].1){
                 return false;
             }
-
-            //send request Merkle Tree for each of the proof: send tag 3 followed by the indexes
-            let bytes_i = i.to_le_bytes();
-            all_verified_indexes.extend(bytes_i);
+            //send request Merkle Tree for each of the proof: send tag 3 followed by the indexes (block_ids), followed by the positions 
+            let block_id = i.to_le_bytes();
+            let position = self.seed_map[&i].to_be_bytes();
+            verified_blocks_and_positions.extend(block_id);
+            verified_blocks_and_positions.extend(position);
             i = i + ((avg_step + random_step) as u32);
         }
 
-        send_msg(&self.stream, &all_verified_indexes);
+        send_msg(&self.stream, &verified_blocks_and_positions);
         return true;
     }
 }
