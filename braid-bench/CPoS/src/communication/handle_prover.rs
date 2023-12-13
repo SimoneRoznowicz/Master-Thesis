@@ -3,16 +3,15 @@ use std::hash::{Hash, Hasher};
 use std::net::TcpStream;
 use std::sync::mpsc;
 
-use log::{info,warn,error};
+use log::{error, info, warn};
 
 use crate::block_generation::blockgen::SIZE;
 use crate::block_generation::utils;
-use crate::block_generation::utils::Utils::{BATCH_SIZE,NUM_BLOCK_GROUPS_PER_UNIT,NUM_FRAGMENTS_PER_UNIT,MAX_NUM_PROOFS,INITIAL_BLOCK_ID,INITIAL_POSITION};
+use crate::block_generation::utils::Utils::{
+    BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, MAX_NUM_PROOFS, NUM_BLOCK_GROUPS_PER_UNIT,
+    NUM_FRAGMENTS_PER_UNIT,
+};
 use crate::communication::structs::Notification;
-
-
-
-
 
 // pub fn handle_challenge(msg: &[u8], stream: &TcpStream, receiver: mpsc::Receiver<Signal>) {
 //     let mut counter = 0;
@@ -48,20 +47,20 @@ use crate::communication::structs::Notification;
 //     let proof_batch: [u8;BATCH_SIZE] = [0;BATCH_SIZE];
 //     for mut iteration_c in 0..proof_batch.len() {
 //         (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
-//         //proof_buffer[iteration_c] = 
+//         //proof_buffer[iteration_c] =
 //     }
-//     let peer_addr = stream.peer_addr().unwrap().to_string(); 
+//     let peer_addr = stream.peer_addr().unwrap().to_string();
 //     info!("Preparing batch of proofs...");
 //     let mut response_msg: [u8; BATCH_SIZE] = [1; BATCH_SIZE];
 //     response_msg[1..].copy_from_slice(&proof_batch);
 //     let my_slice: &[u8] = &response_msg;
-    
+
 //     start_client(&peer_addr, &response_msg);
 //     info!("Batch of proofs sent to the verifier");
 // }
 
 // // Try not to generate every time
-pub fn random_path_generator(id: u32, c: usize, p: u32, s: u8) -> (u32,u32) {
+pub fn random_path_generator(id: u32, c: usize, p: u32, s: u8) -> (u32, u32) {
     let mut hasher_nxt_block = DefaultHasher::new();
     let mut hasher_nxt_pos = DefaultHasher::new();
 

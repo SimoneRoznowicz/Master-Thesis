@@ -1,6 +1,6 @@
-use crate::Merkle_Tree::util::*;
 use crate::Merkle_Tree::node_generic::*;
 use crate::Merkle_Tree::structs::*;
+use crate::Merkle_Tree::util::*;
 use serde::{Deserialize, Serialize};
 use talk::crypto::primitives::hash::Hash;
 
@@ -40,17 +40,17 @@ where
         &mut self.root
     }
 
-    /// Returns the created Leaf node as NodeGeneric. 
+    /// Returns the created Leaf node as NodeGeneric.
     /// Returns an already existing Leaf as NodeGeneric if the key to be inserted
-    /// already exists. Inserts a new Leaf in the MerkleTree if the key is not 
+    /// already exists. Inserts a new Leaf in the MerkleTree if the key is not
     /// contained or substitutes the current value associated to the given key.
     /// Panics if there is a collision
     pub fn insert(&mut self, key_to_add: K, value_to_add: V) -> NodeGeneric<K, V> {
         self.root.insert(key_to_add, value_to_add, 0)
     }
 
-    /// Returns a Result which contains: a reference of the NodeGeneric associated 
-    /// to the given key, if the key is contained; Err(()) otherwise. 
+    /// Returns a Result which contains: a reference of the NodeGeneric associated
+    /// to the given key, if the key is contained; Err(()) otherwise.
     /// Panics if the given key is not associated to any value in the MerkleTree.
     pub fn get_node(&self, key: K) -> Result<&NodeGeneric<K, V>, ()> {
         self.root.find_path(&key, 0)
@@ -87,8 +87,8 @@ where
         Proof::new(siblings)
     }
 
-    /// Returns the hash of the root of the MerkleTree. Recursively computes 
-    /// and assigns the corresponding Hash to every internal node. 
+    /// Returns the hash of the root of the MerkleTree. Recursively computes
+    /// and assigns the corresponding Hash to every internal node.
     pub fn compute_hashes(&mut self) -> Hash {
         self.root.compute_hashes()
     }
@@ -103,40 +103,3 @@ where
         self.prove(key)
     }
 }
-
-/// Helper function to convert the Proof struct into a vector of bytes
-pub fn from_proof_to_bytes(proof: Proof) -> Vec<u8>{  //[tag, direction, 32_hash_bytes..., direction, 32_hash_bytes,...]
-    let mut vec: Vec<u8> = Vec::new();
-    let tag = 4;
-    vec.push(tag);
-    for sibling in proof.get_siblings(){
-        let bytes_hash = sibling.get_hash().to_bytes();
-        let direction = sibling.get_direction();
-        match *direction{
-            Direction::Left => {vec.push(0)},       //Left  --> 0
-            Direction::Right => {vec.push(1)},      //Right --> 1
-        }
-        vec.extend_from_slice(&bytes_hash);
-    }
-    return vec;
-}
-
-/// Helper function to convert a vector of into the Proof structs
-pub fn from_bytes_to_proof(vec: Vec<u8>) -> Proof {  //[direction, 32_hash_bytes..., direction, 32_hash_bytes,...]
-    let mut siblings: Vec<Sibling> = Vec::new();
-    let len_hash = 32;
-    let mut i = 0;
-    while(i<vec.len()){
-        let direction: Direction;
-        if vec[i] == 0 {direction = Direction::Left;}
-        else {direction = Direction::Right;}
-        let mut hash_bytes: [u8; 32] = Default::default();
-        hash_bytes.copy_from_slice(&vec[i + 1..i + 1 + len_hash]);
-        let hash = Hash::from_bytes(hash_bytes);
-        let sibling = Sibling::new(hash,direction);
-        siblings.push(sibling);
-        i += len_hash+1;
-    }
-    return Proof::new(siblings);
-}
-

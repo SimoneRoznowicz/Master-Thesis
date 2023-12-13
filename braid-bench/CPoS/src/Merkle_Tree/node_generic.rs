@@ -1,9 +1,8 @@
-use crate::Merkle_Tree::util::*;
 use crate::Merkle_Tree::structs::*;
+use crate::Merkle_Tree::util::*;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Borrow, boxed::Box, vec::Vec};
 use talk::crypto::primitives::hash::{hash, Hash};
-
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
 pub enum NodeGeneric<K, V>
@@ -16,7 +15,6 @@ where
     Empty(Empty),
 }
 
-
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Internal<K, V>
 where
@@ -28,10 +26,8 @@ where
     my_hash: Option<Hash>,
 }
 
-
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub struct Empty {}
-
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub struct Leaf<K, V>
@@ -44,7 +40,6 @@ where
     my_hash: Hash,
 }
 
-
 impl<K, V> NodeGeneric<K, V>
 where
     K: Serialize + Clone + Eq,
@@ -55,14 +50,14 @@ where
         Self::Empty(Empty::new())
     }
 
-    /// Returns a new Internal node as NodeGeneric. The left and right nodes are 
+    /// Returns a new Internal node as NodeGeneric. The left and right nodes are
     /// Empty nodes as NodeGeneric.
     pub fn new_internal_default() -> Self {
         Self::Internal(Internal::new(NodeGeneric::new(), NodeGeneric::new(), None))
     }
 
     /// Returns the hash of the node invoking this method. Recursively computes and
-    /// assigns the corresponding Hash to every internal node in the underlying MerklTree. 
+    /// assigns the corresponding Hash to every internal node in the underlying MerklTree.
     pub fn compute_hashes(&mut self) -> Hash {
         match self {
             NodeGeneric::Empty(n) => Empty::get_hash(),
@@ -71,7 +66,7 @@ where
         }
     }
 
-    /// Returns the Hash of a NodeGeneric recursively computing the Hash of each node 
+    /// Returns the Hash of a NodeGeneric recursively computing the Hash of each node
     /// in the underlying MerkleTree.
     pub fn get_hash(&self) -> Hash {
         match self {
@@ -81,8 +76,8 @@ where
         }
     }
 
-    /// Returns a Result which contains: a reference of the NodeGeneric associated 
-    /// to the given key, if the key is contained; Err(()) otherwise. 
+    /// Returns a Result which contains: a reference of the NodeGeneric associated
+    /// to the given key, if the key is contained; Err(()) otherwise.
     /// Panics if the given key is not associated to any value in the MerkleTree.
     pub fn find_path<Q: ?Sized>(&self, key: &Q, index: u8) -> Result<&NodeGeneric<K, V>, ()>
     where
@@ -105,9 +100,9 @@ where
         }
     }
 
-    /// Returns the created Leaf node as NodeGeneric. 
+    /// Returns the created Leaf node as NodeGeneric.
     /// Returns an already existing Leaf as NodeGeneric if the key to be inserted
-    /// already exists. Inserts a new Leaf in the underlying MerkleTree if the key is not 
+    /// already exists. Inserts a new Leaf in the underlying MerkleTree if the key is not
     /// contained or substitutes the current value associated to the given key.
     /// Panics if there is a collision.
     pub fn insert(&mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
@@ -119,7 +114,7 @@ where
     }
 
     /// Recursively updates an initially empty vector of Siblings. While researching the given
-    /// key, a new Sibling is added to the vector every time the depth increases by one unit. 
+    /// key, a new Sibling is added to the vector every time the depth increases by one unit.
     pub fn get_siblings<Q>(&self, key: &Q, index: u8, siblings: &mut Vec<Sibling>)
     where
         K: Borrow<Q>,
@@ -132,7 +127,7 @@ where
             _ => panic!(),
         }
     }
-    
+
     /// Returns a Leaf node from a NodegeGeneric.
     pub fn to_leaf(self) -> Leaf<K, V> {
         match self {
@@ -156,7 +151,6 @@ where
             _ => panic!("Node which is not a Empty!"),
         }
     }
-
 }
 
 impl<K, V> From<&mut Internal<K, V>> for NodeGeneric<K, V>
@@ -194,7 +188,7 @@ where
     }
 
     /// Returns the hash of the node invoking this method. Recursively computes and
-    /// assigns the corresponding Hash to every internal node in the underlying MerklTree. 
+    /// assigns the corresponding Hash to every internal node in the underlying MerklTree.
     fn compute_hashes<Q>(&mut self) -> Hash
     where
         K: Borrow<Q>,
@@ -212,27 +206,27 @@ where
         hash(&(l_hash, r_hash)).unwrap()
     }
 
-    /// Returns the reference of an Option containing the current Hash of the Internal node or 
+    /// Returns the reference of an Option containing the current Hash of the Internal node or
     /// None if the Hash has not been calculated yet.
     pub fn get_current_hash(&self) -> &Option<Hash> {
         &self.my_hash
     }
 
-    /// Returns the Hash of an Internal node by recursively computing the Hash of each node 
+    /// Returns the Hash of an Internal node by recursively computing the Hash of each node
     /// in the underlying MerkleTree.
     pub fn get_hash(&self) -> Hash {
         Internal::<K, V>::create_hash(self.left.get_hash(), self.right.get_hash())
     }
 
-    /// Returns the given Option of Hash. Assigns the given Option of Hash to the 
+    /// Returns the given Option of Hash. Assigns the given Option of Hash to the
     /// inner variable my_hash.
     fn set_hash(&mut self, h: Option<Hash>) -> Hash {
         self.my_hash = h;
         h.unwrap()
     }
 
-    /// Returns a Result which contains: a reference of the NodeGeneric associated 
-    /// to the given key, if the key is contained; Err(()) otherwise. 
+    /// Returns a Result which contains: a reference of the NodeGeneric associated
+    /// to the given key, if the key is contained; Err(()) otherwise.
     /// Panics if the given key is not associated to any value in the MerkleTree.
     fn find_path<Q: ?Sized>(&self, key: &Q, index: u8) -> Result<&NodeGeneric<K, V>, ()>
     where
@@ -249,9 +243,9 @@ where
         }
     }
 
-    /// Returns the created Leaf node as NodeGeneric. 
+    /// Returns the created Leaf node as NodeGeneric.
     /// Returns an already existing Leaf as NodeGeneric if the key to be inserted
-    /// already exists. Inserts a new Leaf in the underlying MerkleTree if the key is not 
+    /// already exists. Inserts a new Leaf in the underlying MerkleTree if the key is not
     /// contained or substitutes the current value associated to the given key.
     /// Panics if there is a collision.
     fn insert(&mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
@@ -277,7 +271,7 @@ where
     }
 
     /// Recursively updates a given vector of Siblings. While researching the given
-    /// key, a new Sibling is added to the vector every time the depth increases by one unit. 
+    /// key, a new Sibling is added to the vector every time the depth increases by one unit.
     fn get_siblings<Q>(&self, key: &Q, index: u8, siblings: &mut Vec<Sibling>)
     where
         K: Borrow<Q>,
@@ -331,9 +325,7 @@ where
     pub fn get_left(&self) -> &NodeGeneric<K, V> {
         &self.left
     }
-
 }
-
 
 impl<K, V> From<Leaf<K, V>> for NodeGeneric<K, V>
 where
@@ -344,7 +336,6 @@ where
         NodeGeneric::Leaf(leaf)
     }
 }
-
 
 impl<K, V> From<&mut Leaf<K, V>> for NodeGeneric<K, V>
 where
@@ -383,16 +374,16 @@ where
         Leaf::create_leaf_hash(&self.k, &self.v)
     }
 
-    /// Returns the given Hash. Assigns the given Hash to the 
+    /// Returns the given Hash. Assigns the given Hash to the
     /// inner variable my_hash.
     fn set_hash(&mut self, h: Hash) -> Hash {
         self.my_hash = h;
         h
     }
 
-    /// Returns the created Leaf node as NodeGeneric. 
+    /// Returns the created Leaf node as NodeGeneric.
     /// Returns an already existing Leaf as NodeGeneric if the key to be inserted
-    /// already exists. Inserts a new Leaf in the underlying MerkleTree if the key is not 
+    /// already exists. Inserts a new Leaf in the underlying MerkleTree if the key is not
     /// contained or substitutes the current value associated to the given key.
     /// Panics if there is a collision.
     fn insert(&mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
@@ -428,7 +419,6 @@ where
     }
 }
 
-
 impl<K, V> From<Empty> for NodeGeneric<K, V>
 where
     K: Serialize + Clone + Eq,
@@ -440,7 +430,6 @@ where
 }
 
 impl Empty {
-
     /// Returns a new Empty node as a NodeGeneric.
     pub fn new() -> Self {
         Empty {}
@@ -451,10 +440,10 @@ impl Empty {
         hash(&()).unwrap()
     }
 
-    /// Returns the created Leaf node as NodeGeneric. 
+    /// Returns the created Leaf node as NodeGeneric.
     /// Returns an already existing Leaf as NodeGeneric if the key to be inserted
-    /// already exists. Inserts a new Leaf in the underlying MerkleTree if the key is not 
-    /// contained or substitutes the current value associated to the given key. 
+    /// already exists. Inserts a new Leaf in the underlying MerkleTree if the key is not
+    /// contained or substitutes the current value associated to the given key.
     /// Panics if there is a collision.
     fn insert<K, V>(&mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V>
     where

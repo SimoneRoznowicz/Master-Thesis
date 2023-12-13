@@ -1,6 +1,6 @@
 use crate::communication::structs::Notification;
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct NotifyNode {
     pub buff: Vec<u8>,
     pub notification: Notification,
@@ -14,4 +14,3 @@ impl NotifyNode {
         }
     }
 }
-

@@ -5,7 +5,7 @@ pub const D: usize = E + 1; // Amount of dependencies of each fragment
 pub const N: usize = 1 << E as usize; // Amount of fragment per block
 const INDEX_MASK: usize = N - 1;
 
-pub const ABSOLUTE_SPEEDUP_UPPERBOUND: usize = E*(1 << (E - 1))*E + (N/2) - 1;
+pub const ABSOLUTE_SPEEDUP_UPPERBOUND: usize = E * (1 << (E - 1)) * E + (N / 2) - 1;
 const DESIRED_SPEEDUP_RATIO: usize = 2;
 const STEPS_LOWERBOUND: usize = DESIRED_SPEEDUP_RATIO * ABSOLUTE_SPEEDUP_UPPERBOUND;
 pub const SIZE: usize = (STEPS_LOWERBOUND + (E - 1)) / E;
@@ -23,9 +23,8 @@ pub type BlockGroup = Vec<FragmentGroup>;
 pub const INIT_SIZE_EXP: usize = 2;
 pub const INIT_SIZE: usize = 1 << INIT_SIZE_EXP; // 4x64bit = 256bit
 pub const INIT_MASK: usize = INIT_SIZE - 1;
-pub type InitGroup = [FragmentGroup; INIT_SIZE];  //array of 4 elements: each element is an array of 4 u64 (8*4bytes) elements
-//eg. InitGroup = [[1,2,3,4],[1,2,3,4],[1,2,3,4],[1,2,3,4]]
-
+pub type InitGroup = [FragmentGroup; INIT_SIZE]; //array of 4 elements: each element is an array of 4 u64 (8*4bytes) elements
+                                                 //eg. InitGroup = [[1,2,3,4],[1,2,3,4],[1,2,3,4],[1,2,3,4]]
 
 pub fn block_gen(inits: InitGroup) -> BlockGroup {
     if is_x86_feature_detected!("avx2") {
@@ -44,7 +43,7 @@ unsafe fn block_gen_avx2(inits: InitGroup) -> BlockGroup {
 fn block_gen_inner(inits: InitGroup) -> BlockGroup {
     // let mut block: Block = [[0; FRAGMENTSIZE]; N as usize];
     let mut block: BlockGroup = vec![[0; GROUP_SIZE]; N as usize];
-    
+
     let start = N - (SIZE % N);
 
     let mut from = 0;
@@ -105,7 +104,7 @@ fn add(a: FragmentGroup, b: FragmentGroup) -> FragmentGroup {
     for i in 0..GROUP_SIZE {
         c[i] = a[i].wrapping_add(b[i]);
     }
-    return c
+    return c;
 }
 
 #[inline(always)]
@@ -114,7 +113,7 @@ fn xor(a: FragmentGroup, b: FragmentGroup) -> FragmentGroup {
     for i in 0..GROUP_SIZE {
         c[i] = a[i] ^ b[i];
     }
-    return c
+    return c;
 }
 
 #[inline(always)]

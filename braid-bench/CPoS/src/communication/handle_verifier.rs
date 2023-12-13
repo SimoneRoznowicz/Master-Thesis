@@ -7,7 +7,10 @@ use rand::seq::SliceRandom;
 
 use crate::block_generation::blockgen::block_gen;
 use crate::block_generation::encoder::generate_block_group;
-use crate::block_generation::utils::Utils::{NUM_PROOFS_TO_VERIFY, NUM_FRAGMENTS_PER_UNIT, NUM_BLOCK_GROUPS_PER_UNIT, INITIAL_BLOCK_ID, INITIAL_POSITION, BATCH_SIZE};
+use crate::block_generation::utils::Utils::{
+    BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,
+    NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY,
+};
 
 // pub fn handle_verification(msg: &[u8], stream: &TcpStream) -> bool {
 //     return verify_time_challenge_bound() && verify_proofs(msg, stream); //if the first is wrong, don't execute verify_proofs
@@ -18,7 +21,6 @@ pub fn verify_time_challenge_bound() -> bool {
 }
 
 pub fn verify_proofs(msg: &[u8], stream: &TcpStream) -> bool {
-    
     let proof_batch = msg[1..].to_vec();
     // if NUM_PROOFS_TO_VERIFY > msg.len().try_into().unwrap() {
     //     //NUM_PROOFS_TO_VERIFY = msg.len().try_into().unwrap() };
@@ -29,7 +31,7 @@ pub fn verify_proofs(msg: &[u8], stream: &TcpStream) -> bool {
     shuffled_elements.shuffle(&mut rng);
 
     for mut i in 0..NUM_PROOFS_TO_VERIFY {
-        if(!sample_generate_verify(msg,stream,i)){
+        if (!sample_generate_verify(msg, stream, i)) {
             return false;
         };
     }
@@ -38,14 +40,14 @@ pub fn verify_proofs(msg: &[u8], stream: &TcpStream) -> bool {
 
 pub fn sample_generate_verify(msg: &[u8], stream: &TcpStream, i: u32) -> bool {
     //first calculate the seed for each possible block: which means block_id and position. Store in a vector
-    let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
-    let mut position: u32 = INITIAL_POSITION;  //Given parameter
+    let mut block_id: u32 = INITIAL_BLOCK_ID; // Given parameter
+    let mut position: u32 = INITIAL_POSITION; //Given parameter
     let seed = msg[1];
-    let proof_batch: [u8;BATCH_SIZE] = [0;BATCH_SIZE];
+    let proof_batch: [u8; BATCH_SIZE] = [0; BATCH_SIZE];
     let mut seed_sequence: Vec<(u32, u32)> = vec![];
     for mut iteration_c in 0..proof_batch.len() {
         (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
-        seed_sequence.push((block_id,position));
+        seed_sequence.push((block_id, position));
     }
 
     //generate_block(i);
@@ -53,7 +55,7 @@ pub fn sample_generate_verify(msg: &[u8], stream: &TcpStream, i: u32) -> bool {
     return false;
 }
 
-pub fn random_path_generator(id: u32, c: usize, p: u32, s: u8) -> (u32,u32) {
+pub fn random_path_generator(id: u32, c: usize, p: u32, s: u8) -> (u32, u32) {
     let mut hasher_nxt_block = DefaultHasher::new();
     let mut hasher_nxt_pos = DefaultHasher::new();
 
@@ -73,4 +75,3 @@ pub fn random_path_generator(id: u32, c: usize, p: u32, s: u8) -> (u32,u32) {
 
     return (new_id.try_into().unwrap(), new_p.try_into().unwrap());
 }
-

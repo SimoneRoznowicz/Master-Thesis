@@ -1,13 +1,11 @@
 use serde::{Deserialize, Serialize};
 use talk::crypto::primitives::hash::Hash;
 
-
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum Direction {
     Left,
     Right,
 }
-
 
 impl From<Left> for Direction {
     fn from(left: Left) -> Self {
@@ -31,7 +29,6 @@ impl Left {
     }
 }
 
-
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Right {}
 
@@ -41,7 +38,6 @@ impl Right {
         true
     }
 }
-
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Id<K>
@@ -85,13 +81,12 @@ impl Sibling {
     pub fn get_direction(&self) -> &Direction {
         &self.direction
     }
-    
+
     /// Returns the Hash associated with the Sibling invoking the method.
     pub fn get_hash(&self) -> &Hash {
         &self.hash
     }
 }
-
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Proof {

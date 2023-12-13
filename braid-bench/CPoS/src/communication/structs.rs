@@ -1,4 +1,4 @@
-#[derive(Debug,Copy,Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Notification {
     Start,
     Stop,
@@ -10,26 +10,26 @@ pub enum Notification {
     Terminate,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum Verification_Status {
     Executing,
     Terminated,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum Fairness {
     Undecided,
     Fair,
     Unfair(Failure_Reason),
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum Failure_Reason {
     Time,
     Correctness,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum Time_Verification_Status {
     Insufficient_Proofs,
     Correct,
