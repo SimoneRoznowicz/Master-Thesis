@@ -8,7 +8,8 @@ pub mod Utils {
     pub static INITIAL_BLOCK_ID: u32 = 0;
     pub static INITIAL_POSITION: u32 = 0;
     pub static NUM_PROOFS_TO_VERIFY: u32 = 10;
-    pub static CHECKING_FACTOR: f32 = 0.25;   
+    pub static CHECKING_FACTOR: f32 = 0.25;
     pub const NUM_BYTES_PER_BLOCK_ID: usize = 4;
     pub const NUM_BYTES_PER_POSITION: usize = 4;
+    pub const HASH_BYTES_LEN: usize = 32;
 }

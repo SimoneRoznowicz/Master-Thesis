@@ -3,7 +3,7 @@ use log::{info,error, warn, debug, trace};
 use rand::{Rng, seq::SliceRandom};
 use talk::crypto::primitives::hash::HASH_LENGTH;
 
-use crate::{communication::{client::{send_msg},structs::{Notification, Fairness, Verification_Status, Failure_Reason, Time_Verification_Status}, handle_prover::random_path_generator}, block_generation::{utils::Utils::{INITIAL_POSITION, INITIAL_BLOCK_ID, BATCH_SIZE, NUM_BLOCK_GROUPS_PER_UNIT, NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY, MAX_NUM_PROOFS, CHECKING_FACTOR}, encoder::generate_block_group, blockgen::BlockGroup}, Merkle_Tree::{mpt::{MerkleTree, from_bytes_to_proof}, structs::{Proof, Id}, client_verify::get_root_hash}};
+use crate::{communication::{client::{send_msg},structs::{Notification, Fairness, Verification_Status, Failure_Reason, Time_Verification_Status}, handle_prover::random_path_generator}, block_generation::{utils::Utils::{INITIAL_POSITION, INITIAL_BLOCK_ID, BATCH_SIZE, NUM_BLOCK_GROUPS_PER_UNIT, NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY, MAX_NUM_PROOFS, CHECKING_FACTOR, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, HASH_BYTES_LEN}, encoder::generate_block_group, blockgen::BlockGroup}, Merkle_Tree::{mpt::{MerkleTree, from_bytes_to_proof}, structs::{Proof, Id}, client_verify::get_root_hash}};
 
 use super::structs::NotifyNode;
 
@@ -15,8 +15,8 @@ pub struct Verifier {
     proofs: Vec<u8>,
     is_fair: bool,
     is_terminated: bool,
-    seed_map: HashMap<u32,u32>,
-    hash_root: [u8; HASH_LENGTH],
+    seed_map: HashMap<(u32,u32),(u8,bool)>, // k: (block_id,position) v: (byte_value, inclusion_proof_already_verified)
+    //hash_root: [u8; HASH_LENGTH],
     status: (Verification_Status,Fairness)
 }
 
@@ -49,8 +49,8 @@ impl Verifier {
         let mut status = (Verification_Status::Executing,Fairness::Undecided);
         let is_fair = true;
         let is_terminated = false;
-        let mut seed_map: HashMap<u32, u32> = HashMap::new();
-        let hash:[u8; HASH_LENGTH] = Default::default();
+        let mut seed_map: HashMap<(u32,u32),(u8,bool)> = HashMap::new();
+        //let hash:[u8; HASH_LENGTH] = Default::default();
         let mut this = Self {
             address,
             prover_address,
@@ -60,7 +60,7 @@ impl Verifier {
             is_fair,
             is_terminated,
             seed_map,
-            hash_root: hash,
+            //hash_root: hash,
             status,
         };
         this.start_server(sender);
@@ -116,23 +116,9 @@ impl Verifier {
                         },
                         Notification::Handle_Inclusion_Proof => {
                             let sender_clone = sender.clone();
-                            let tag = notify_node.buff[0];
-                            // if(tag == 4) {  //This is the first Inclusion proof received:
-                            //     self.hash_root.copy_from_slice(&notify_node.buff[1..1+HASH_LENGTH]);
-                            //     let root_hash = self.hash_root.clone();
-                            //     let mut buff_without_root_hash: Vec<u8> = Vec::new();
-                            //     buff_without_root_hash.push(5);
-                            //     buff_without_root_hash.extend_from_slice(&notify_node.buff[1+HASH_LENGTH..]);
-                            //     thread::spawn(move || {
-                            //         handle_inclusion_proof(&buff_without_root_hash, &sender_clone, &root_hash);
-                            //     });
-                            // }
-                            // else {  //tag == 5
-                                let root_hash = self.hash_root.clone();
-                                thread::spawn(move || {
-                                    handle_inclusion_proof(&notify_node.buff, &sender_clone, &root_hash);
-                                });
-                            // }
+                            thread::spawn(move || {
+                                handle_inclusion_proof(&notify_node.buff[1+HASH_LENGTH..], &sender_clone);
+                            });
                         }
                         Notification::Update => {
                             if !self.is_terminated {
@@ -166,7 +152,6 @@ impl Verifier {
                 },
                 Err(e) => {warn!("Error == {}", e)}
             }
-
         }
         thread::sleep(Duration::from_secs(5));
     }
@@ -190,19 +175,17 @@ impl Verifier {
     //update eg.  i = i + (1/3)*10
     //update i = i + (% of samples I want to test) * (length of proof vector)
     fn verify_correctness_proofs(&mut self, msg: &[u8]) -> bool {
-        let mut block_id: u32 = INITIAL_BLOCK_ID;  // Given parameter
-        let mut position: u32 = INITIAL_POSITION;  //Given parameter
+        let mut block_id: u32 = INITIAL_BLOCK_ID;  
+        let mut position: u32 = INITIAL_POSITION;  
         let seed = msg[1];  //sbagliato lo devi prendere da self il seed
         let mut seed_sequence: Vec<(u32, u32)> = vec![];
-        let mut seed_map: HashMap<u32, u32> = HashMap::new();
 
         for mut iteration_c in 0..msg.len() {
             (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
             seed_sequence.push((block_id,position));
-            seed_map.insert(block_id, position);
+            
             //dovrebbe essere una map con key u8 ovvero block_id e value u8 ovvero la position del byte nel block
         }
-        self.seed_map = seed_map;
 
         let mut i: u32 = 0;
         let proofs_len = msg.len() as u32;
@@ -211,13 +194,14 @@ impl Verifier {
 
         let mut verified_blocks_and_positions: Vec<u8> = Vec::new();
         verified_blocks_and_positions.push(3);   //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
-        while (i<msg.len() as u32){
-            if !check_block(seed_sequence[i as usize].0,seed_sequence[i as usize].1){
+        while (i<msg.len() as u32) {
+            self.seed_map.insert((block_id,position), (0,false));
+            if !self.check_block(seed_sequence[i as usize].0,seed_sequence[i as usize].1, msg[(i+1) as usize]){
                 return false;
             }
             //send request Merkle Tree for each of the proof: send tag 3 followed by the indexes (block_ids), followed by the positions 
             let block_id = i.to_le_bytes();
-            let position = self.seed_map[&i].to_be_bytes();
+            let position = seed_sequence[i as usize].1.to_le_bytes();
             verified_blocks_and_positions.extend(block_id);
             verified_blocks_and_positions.extend(position);
             i = i + ((avg_step + random_step) as u32);
@@ -226,8 +210,24 @@ impl Verifier {
         send_msg(&self.stream, &verified_blocks_and_positions);
         return true;
     }
-}
 
+    //[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15]]
+    //blockid 10
+    //10 / 4  = 2
+    //8 / 4  = 2
+    //10 % 4 == 2
+    fn check_block(&mut self, block_id: u32, pos_in_block: u32, byte_received: u8) -> bool {
+        let block_group = generate_block_group((block_id / 4).try_into().unwrap());
+        let block_in_group = block_id % 4; 
+        let block = block_group[(block_id % 4) as usize];
+        let fragment = block[(pos_in_block/4) as usize];
+        let byte_value = fragment.to_le_bytes()[(pos_in_block%4) as usize];
+
+        self.seed_map.insert((block_id,pos_in_block),(byte_value,false));
+
+        return byte_value == byte_received;
+    }
+}
 
 fn send_stop_msg(stream: &TcpStream){
     info!("Sending Stop message to the prover");
@@ -235,14 +235,18 @@ fn send_stop_msg(stream: &TcpStream){
     send_msg(stream, &msg_to_send[..]);
 }
 
-fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u8>, sender: &Sender<NotifyNode>) {
-    //note that new_proofs e proofs hanno gia rimosso il primo byte del tag
-    //Update vector of proofs
-    proofs.extend(new_proofs);
+fn send_update_notification(new_proofs: &[u8], sender: &Sender<NotifyNode>){
     let mut update_new_proofs = Vec::new();
     update_new_proofs.push(0);
     update_new_proofs.extend_from_slice(new_proofs);
     sender.send(NotifyNode {buff: update_new_proofs, notification: Notification::Update}).unwrap();
+}
+
+fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u8>, sender: &Sender<NotifyNode>) {
+    //note that new_proofs e proofs hanno gia rimosso il primo byte del tag
+    //Update vector of proofs
+    proofs.extend(new_proofs);
+    send_update_notification(new_proofs, sender);
     //verify_time_challenge_bound() should return three cases:
     //Still not verified
     //Verified Correct (we can proceed to verify the correctness of the proofs)
@@ -269,31 +273,39 @@ fn handle_verification(stream: &TcpStream, new_proofs: &[u8], proofs: &mut Vec<u
     }
 }
 
-fn handle_inclusion_proof(bytes_proof: &[u8], sender: &Sender<NotifyNode>, root_hash_bytes: &[u8;32]) {
-    let proof = from_bytes_to_proof(bytes_proof.to_vec());
-    let byte_value: u8 = 0;
-    let byte_position: u8 = 0;
-    let hash_retrieved = get_root_hash::<u8,u8>(proof, byte_value, Id::<u8>::new(byte_position));
-    let stored_root_hash = root_hash_bytes;  //FAKE
-    let mut correctness_flag = 1;  //Default: false
-    if(hash_retrieved.to_bytes() == *stored_root_hash){  //convert to byte array the hash_retrieved. Then compare.
+fn handle_inclusion_proof(msg: &[u8], sender: &Sender<NotifyNode>) {  
+    //SO THE MESSAGE WILL BE EVENTALLY: TAG,HASH,block_id,byte_position,byte_value,proof
+    let proof = from_bytes_to_proof(msg.to_vec());
+
+    let mut root_hash_bytes: [u8;HASH_BYTES_LEN] = Default::default();
+    root_hash_bytes.copy_from_slice(&msg[1..1+HASH_BYTES_LEN]);
+    
+    let mut block_id_in_bytes: [u8; NUM_BYTES_PER_BLOCK_ID] = [0; NUM_BYTES_PER_BLOCK_ID];
+    block_id_in_bytes.copy_from_slice(&msg[1+HASH_BYTES_LEN..1+HASH_BYTES_LEN+NUM_BYTES_PER_BLOCK_ID]);
+    let block_id = u32::from_le_bytes(block_id_in_bytes);
+
+    let mut position_in_byte: [u8; NUM_BYTES_PER_POSITION] = [0; NUM_BYTES_PER_POSITION];
+    position_in_byte.copy_from_slice(&msg[1+32+NUM_BYTES_PER_BLOCK_ID..1+32+NUM_BYTES_PER_BLOCK_ID+NUM_BYTES_PER_POSITION]);
+    let position = u32::from_le_bytes(position_in_byte);
+
+    let byte_value: u8 = msg[1+32+NUM_BYTES_PER_BLOCK_ID+NUM_BYTES_PER_POSITION];  
+       
+    let root_hash_computed = get_root_hash::<u8,(u32,u32)>(proof, byte_value, Id::<(u32,u32)>::new((block_id,position)));
+    let mut correctness_flag = 1;  //Default: false 
+    if(root_hash_computed.to_bytes() == root_hash_bytes){  //convert to byte array the hash_retrieved. Then compare.
         correctness_flag = 0;
     }
     let mut update_new_proofs = Vec::new();
     update_new_proofs.push(1);
     update_new_proofs.push(correctness_flag);
+    
 
+    //HOE TO CHECK THAT ALL INCLUSION PROOFS WERE RECEIVED
     sender.send(NotifyNode {buff: update_new_proofs, notification: Notification::Update}).unwrap();
 }
 
 fn verify_time_challenge_bound() -> Time_Verification_Status{
     return Time_Verification_Status::Incorrect;
-}
-
-fn check_block(block_id: u32, pos_in_block: u32) -> bool{
-    //TODO
-    let block = generate_block_group(block_id.try_into().unwrap());
-    return true;
 }
 
 fn sample_generate_verify(msg: &[u8], i: u32) -> bool {
@@ -330,14 +342,14 @@ fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
     let tag = msg[0];
     debug!("Tag in verifier is == {}", msg[0]);
     if tag == 1 {
-        debug!("Thread in verifier notified of the new buffer. Send for verification to the main thread");
+        debug!("Handle Verification of the proof");
         match sender.send(NotifyNode{ buff: msg[1..].to_vec(), notification: Notification::Verification_Time }) {
             Ok(_) => {debug!("good send to main")},
             Err(e) => {debug!("error first send channel == {}",e)},
         };
     }
-    else if tag == 4 || tag == 5 {
-        info!("Handle Verification of the first Inclusion Proof");
+    else if tag == 4 {
+        info!("Handle Verification of the Inclusion Proof");
         match sender.send(NotifyNode{ buff: msg[1..].to_vec(), notification: Notification::Handle_Inclusion_Proof }) {
             Ok(_) => {debug!("good send to main")},
             Err(e) => {debug!("error first send channel == {}",e)},
