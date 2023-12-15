@@ -1,17 +1,10 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::net::TcpStream;
-use std::sync::mpsc;
-
-use log::{error, info, warn};
-
-use crate::block_generation::blockgen::SIZE;
-use crate::block_generation::utils;
 use crate::block_generation::utils::Utils::{
-    BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, MAX_NUM_PROOFS, NUM_BLOCK_GROUPS_PER_UNIT,
-    NUM_FRAGMENTS_PER_UNIT,
+    NUM_BLOCK_GROUPS_PER_UNIT,
+    NUM_FRAGMENTS_PER_UNIT, NUM_BLOCKS_PER_UNIT, NUM_BYTES_IN_BLOCK,
 };
-use crate::communication::structs::Notification;
+
 
 // pub fn handle_challenge(msg: &[u8], stream: &TcpStream, receiver: mpsc::Receiver<Signal>) {
 //     let mut counter = 0;
@@ -69,14 +62,14 @@ pub fn random_path_generator(id: u32, c: usize, p: u32, s: u8) -> (u32, u32) {
     id.hash(&mut hasher_nxt_block);
     c.hash(&mut hasher_nxt_block);
     p.hash(&mut hasher_nxt_block);
-    let new_id = hasher_nxt_block.finish() % NUM_BLOCK_GROUPS_PER_UNIT as u64;
+    let new_id = hasher_nxt_block.finish() % NUM_BLOCKS_PER_UNIT as u64;
 
     s.hash(&mut hasher_nxt_pos);
     id.hash(&mut hasher_nxt_pos);
     c.hash(&mut hasher_nxt_pos);
     p.hash(&mut hasher_nxt_pos);
-    NUM_FRAGMENTS_PER_UNIT.hash(&mut hasher_nxt_pos);
-    let new_p = hasher_nxt_pos.finish() % NUM_FRAGMENTS_PER_UNIT as u64;
+    NUM_BYTES_IN_BLOCK.hash(&mut hasher_nxt_pos);
+    let new_p = hasher_nxt_pos.finish() % NUM_BYTES_IN_BLOCK as u64;      
 
     return (new_id.try_into().unwrap(), new_p.try_into().unwrap());
 }

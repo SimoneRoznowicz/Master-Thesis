@@ -1,6 +1,6 @@
 use crate::Merkle_Tree::node_generic::*;
 use crate::Merkle_Tree::structs::*;
-use crate::Merkle_Tree::util::*;
+
 use serde::{Deserialize, Serialize};
 use talk::crypto::primitives::hash::Hash;
 
@@ -77,9 +77,9 @@ where
         let mut siblings = Vec::<Sibling>::new();
         let node_err = self.get_node(key.clone());
 
-        let mut_node_err = match node_err {
-            Ok(n) => {}
-            Err(e) => return Proof::new(siblings),
+        let _mut_node_err = match node_err {
+            Ok(_n) => {}
+            Err(_e) => return Proof::new(siblings),
         };
 
         self.root.get_siblings(&key, 0, &mut siblings);

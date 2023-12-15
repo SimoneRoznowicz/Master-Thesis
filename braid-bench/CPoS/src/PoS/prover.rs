@@ -1,33 +1,34 @@
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::option;
-use std::os::windows::io::AsRawHandle;
+
+
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
-use std::sync::mpsc::{self, Sender, TryRecvError};
-use std::sync::{Arc, Mutex, RwLock};
-use std::thread::{self, Thread};
+use std::sync::mpsc::{Sender, TryRecvError};
+use std::sync::{Arc, Mutex};
+use std::thread::{self};
 
-use aes::Block;
+
 use log::{debug, error, info, trace, warn};
+use serde_json::error;
 // use first_rust_project::src;
 
-use crate::block_generation::blockgen::{self, BlockGroup, FragmentGroup};
+use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE};
 use crate::block_generation::encoder::generate_block_group;
 use crate::block_generation::utils::Utils::{
-    BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, MAX_NUM_PROOFS, NUM_BLOCK_GROUPS_PER_UNIT,
-    NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION,
+    BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,
+    NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, NUM_BYTES_IN_BLOCK,
 };
-use crate::communication::client::{send_msg, send_msg_prover};
+use crate::communication::client::{send_msg};
 use crate::communication::handle_prover::random_path_generator;
 use crate::communication::structs::Notification;
 use crate::Merkle_Tree::mpt::MerkleTree;
-use crate::Merkle_Tree::structs::Proof;
+
 
 use super::structs::NotifyNode;
 use super::utils::from_proof_to_bytes;
-use super::verifier;
+
 
 #[derive(Debug)]
 pub struct Prover {
@@ -56,7 +57,7 @@ impl Prover {
         debug!("beginning of new Prover");
         let mut unit: Vec<FragmentGroup> = Vec::new();
 
-        let mut new_file = OpenOptions::new()
+        let new_file = OpenOptions::new()
             .create(true)
             .append(true)
             .read(true)
@@ -66,18 +67,20 @@ impl Prover {
 
         let shared_file = Arc::new(Mutex::new(new_file));
         {
+            //File of total length (2^21)*(NUM_BLOCK_GROUPS_PER_UNIT) 
             let mut file = shared_file.lock().unwrap();
             for i in 0..NUM_BLOCK_GROUPS_PER_UNIT {
                 let block_group = generate_block_group(i);
                 debug!("4 Blocks generated");
-                for block in block_group {
-                    for bytes_fragment in block {
-                        let byte_fragment = bytes_fragment.to_le_bytes();
+                for i in 0..GROUP_SIZE {  
+                    for j in 0..block_group.len() {
+                        let byte_fragment = block_group[j][i].to_le_bytes();
                         file.write_all(&byte_fragment).unwrap();
                     }
-                    unit.push(block);
                 }
-            }
+            }  
+            let mut metadata = file.metadata();
+            warn!("Length file == {}", metadata.unwrap().len());
         }
         // file.seek(SeekFrom::Start(0)).unwrap();
 
@@ -88,7 +91,7 @@ impl Prover {
         // };
 
         let mut encoded: Vec<u8> = bincode::serialize(&unit).unwrap();
-        let enc_slice: &[u8] = encoded.as_mut_slice();
+        let _enc_slice: &[u8] = encoded.as_mut_slice();
 
         let stream: Option<TcpStream> = None;
         let mut this = Self {
@@ -114,17 +117,17 @@ impl Prover {
             loop {
                 //secondo me in qualche modo non rilascia qua
                 let sender_clone = sender.clone();
-                // let mut stream_clone = stream.try_clone().unwrap();
+                let mut stream_clone = stream.try_clone().unwrap();
                 // //info!("New connection: {}", stream.peer_addr().unwrap());
                 let mut data = [0; 128]; // Use a smaller buffer size
-                let retrieved_data = handle_stream(&mut stream, &mut data);
+                let retrieved_data = handle_stream(&mut stream_clone, &mut data);
                 handle_message(retrieved_data, sender_clone);
             }
         });
     }
 
     pub fn main_handler(&mut self, receiver: &Receiver<NotifyNode>) {
-        let mut counter = 0;
+        let _counter = 0;
         let mut is_started = false;
         // while counter < MAX_NUM_PROOFS {
         loop {
@@ -158,7 +161,7 @@ impl Prover {
                     }
                 },
                 Err(TryRecvError::Empty) => {
-                    if (is_started) {
+                    if is_started {
                         create_and_send_proof_batches(
                             &self.stream_opt,
                             self.seed,
@@ -166,7 +169,7 @@ impl Prover {
                             &self.shared_file,
                         );
                     }
-                    warn!("In TryRecvError::Empty send batches");
+                    info!("In TryRecvError::Empty send batches");
                 }
                 Err(TryRecvError::Disconnected) => {
                     error!("The prover has been disconnected");
@@ -183,7 +186,7 @@ impl Prover {
         let mut positions: Vec<u32> = Vec::new();
         let mut i = 1;
         // Retrieve block_ids and positions from msg by the verifier
-        while (i < msg.len()) {
+        while i < msg.len() {
             let mut index_array: [u8; NUM_BYTES_PER_BLOCK_ID] = [0; NUM_BYTES_PER_BLOCK_ID];
             index_array.copy_from_slice(&msg[i..i + NUM_BYTES_PER_BLOCK_ID]);
             let retrieved_block_id = u32::from_le_bytes(index_array);
@@ -235,10 +238,8 @@ impl Prover {
 pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a [u8] {
     // let mut stream_opt_clone = stream_opt.clone();
     // let mut locked_stream = stream_opt_clone.lock().unwrap();//stream_opt.lock().unwrap().as_ref().clone();
-    warn!("After locking stream in read");
     match stream.read(data) {
         Ok(_) => {
-            warn!("Going to unlock stream in reads");
             return &data[..];
         }
         Err(_) => {
@@ -252,7 +253,7 @@ pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a [u8]
 pub fn create_and_send_proof_batches(
     stream: &Option<TcpStream>,
     seed: u8,
-    receiver: &Receiver<NotifyNode>,
+    _receiver: &Receiver<NotifyNode>,
     file: &Arc<Mutex<File>>,
 ) {
     let mut block_id: u32 = INITIAL_BLOCK_ID; // Given parameter
@@ -263,7 +264,6 @@ pub fn create_and_send_proof_batches(
     for iteration_c in 0..proof_batch.len() {
         (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
         proof_batch[iteration_c] = read_byte_from_file(file, block_id, position);
-        //serve averE ACCESSO A FILE DI SELF
     }
     let mut response_msg: [u8; BATCH_SIZE + 1] = [1; BATCH_SIZE + 1];
     //the tag is 1
@@ -312,15 +312,15 @@ pub fn send_create_inclusion_proofs(msg: &[u8], sender: &Sender<NotifyNode>) {
 pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
     let tag = msg[0];
     debug!("msg == {}", msg[0]);
-    if (tag == 0) {
+    if tag == 0 {
         //Notify the main thread to start creating proof
         trace!("In prover the tag is 0");
         send_start_notification(msg, &sender);
-    } else if (tag == 2) {
+    } else if tag == 2 {
         //Notify the main thread to stop creating proofs
         trace!("In prover the tag is 2");
         send_stop_notification(&sender);
-    } else if (tag == 3) {
+    } else if tag == 3 {
         //Notify the main thread to start creating inclusion proofs
         trace!("In prover the tag is 3");
         send_create_inclusion_proofs(msg, &sender);
@@ -331,14 +331,20 @@ pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
 
 pub fn read_byte_from_file(shared_file: &Arc<Mutex<File>>, block_id: u32, position: u32) -> u8 {
     let mut file = shared_file.lock().unwrap();
-    file.seek(SeekFrom::Start(block_id as u64 * 256 + position as u64))
-        .unwrap();
+    let index = (block_id * NUM_BYTES_IN_BLOCK) as u64 + position as u64;
 
+    let metadata = file.metadata();
+    debug!("block_id == {} while position == {}", block_id, position);
+    debug!("index == {} while file is long {}", index, metadata.unwrap().len());
+    
+    file.seek(SeekFrom::Start(index)).unwrap();
+
+    //Expected total size of the file: block_size*20 = ~80 Miliardi
     let mut buffer = [0; 1];
     match file.read_exact(&mut buffer) {
         Ok(_) => {}
         Err(e) => {
-            info!("error == {:?}", e)
+            error!("Error reading file == {:?}", e)
         }
     };
 

@@ -6,17 +6,20 @@ mod communication;
 extern crate env_logger;
 extern crate log;
 
-use aes::Block;
-use log::info;
-use std::fs::{File, OpenOptions};
+
+
+use std::fs::{OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::thread;
 use std::time::Duration;
 // use first_rust_project::Direction;
 
-use crate::PoS::verifier::Verifier;
+
 //use crate::communication::server::start_server;
 use crate::PoS::prover::Prover;
+use crate::PoS::verifier::Verifier;
+use crate::block_generation::blockgen::GROUP_SIZE;
+use crate::block_generation::encoder::generate_block_group;
 
 /*
 * Possible logger levels are: Error, Warn, Info, Debug, Trace
@@ -35,29 +38,67 @@ fn set_logger() {
 //     print!("var == {}", var);
 // }
 
+
+/*A block_group is made of a Vec<[u64,4]>: a Vector containing (2^16 = 65536 elements).
+    So in total: there are 2^18 = 262144 u64 elements --> 2^21 = 2097152 u8 elements in a block_group
+    A single block is instead made of u8_in_a_block_group/4 = 2^19 = 524288 total bytes
+*/
 fn main() {
     let is_test = false;
     if is_test {
-        let vec = vec![vec![1, 2], vec![3, 4], vec![5, 6]];
-        let flattened_vector: Vec<u8> = vec.into_iter().flatten().collect();
         let mut file = OpenOptions::new()
             .create(true)
             .read(true)
             .write(true)
-            .open("test_main.bin")
+            .open("TestFile.bin")
             .unwrap();
-        file.write_all(&flattened_vector).unwrap();
-        file.seek(SeekFrom::Start(3)).unwrap();
-        let mut buffer = [0; 1];
+        let block_group = generate_block_group(0);
+        let block: Vec<u64> = block_group[0].to_vec();
+        let mut bufu8: Vec<u8> = Vec::new();
+    
+        // for &bytesu64 in &block {
+        //     let bytes: [u8; 8] = bytesu64.to_be_bytes();
+        //     bufu8.extend_from_slice(&bytes);
+        // }
 
-        match file.read_exact(&mut buffer) {
+        let block_group: Vec<[u64; 4]> = generate_block_group(0);
+        println!("4 Blocks generated");
+        println!("block Group len == {}", block_group.len());
+        // print!("block_group == {:?}", block_group);
+        //println!("block_group[0] == {:?}", block_group[0]);
+        let mut metadata = file.metadata();
+        println!("length file = {}",metadata.unwrap().len());
+
+        for i in 0..GROUP_SIZE {  
+            for j in 0..block_group.len() {
+                let byte_fragment = block_group[j][i].to_le_bytes();
+                file.write_all(&byte_fragment).unwrap();
+            }
+        }
+
+        // for i in 0..block_group.len() {
+        //     let block = block_group[i];
+        //     for bytes_fragment in block {
+        //         let byte_fragment = bytes_fragment.to_le_bytes();
+        //         file.write_all(&byte_fragment).unwrap();
+        //     }
+        // }
+
+        let metadataa = file.metadata();
+        println!("length file = {}",metadataa.unwrap().len());
+
+        //file.write_all(&bufu8).unwrap();
+
+        //file.seek(SeekFrom::Start(0)).unwrap();
+        let mut v = Vec::new();
+        match file.read_to_end(&mut v) {
             Ok(_) => {}
             Err(e) => {
                 print!("error == {:?}", e)
             }
         };
 
-        println!("buffer == {}", buffer[0]);
+        println!("buffer == {:?} \nof length == {} ", v, v.len());
         let num_u64: u64 = 123456;
         println!("{:?}", num_u64.to_le_bytes());
         println!("{:?}", num_u64.to_ne_bytes());
@@ -66,10 +107,10 @@ fn main() {
     } else {
         set_logger();
         //challenge: send 1(tag) + 1(seed)
-        //let data: [u8, 5]= [255, 1, 7];
-        let data: [u8; 3] = [255, 20, 30];
+        //let data: [u8, 5] = [255, 1, 7];
+        let _data: [u8; 3] = [255, 20, 30];
 
-        let pub_hash = blake3::hash(b"HELLO");
+        let _pub_hash = blake3::hash(b"HELLO");
 
         let host_prover = String::from("127.0.0.1");
         let port_prover = String::from("3333");
@@ -87,8 +128,8 @@ fn main() {
         thread::spawn(move || {
             Prover::start(addres_prover_clone, addres_verifier_clone);
         });
-        thread::sleep(Duration::from_secs(7));
-        //Verifier::start(address_verifier, address_prover);
+        thread::sleep(Duration::from_secs(9));
+        Verifier::start(address_verifier, address_prover);
         thread::sleep(Duration::from_secs(100));
     }
 }

@@ -1,6 +1,6 @@
-use std::io::{Read, Write};
+use std::io::{Write};
 use std::net::TcpStream;
-use std::str::from_utf8;
+
 use std::sync::{Arc, Mutex};
 extern crate env_logger;
 extern crate log;
@@ -19,14 +19,14 @@ pub fn send_msg(mut stream: &TcpStream, msg: &[u8]) {
     };
 }
 
-pub fn send_msg_prover(mut stream_opt: &Arc<Mutex<Option<TcpStream>>>, msg: &[u8]) {
+pub fn send_msg_prover(stream_opt: &Arc<Mutex<Option<TcpStream>>>, msg: &[u8]) {
     warn!("Starting send_msg_prover");
     let stream_opt_clone = stream_opt.clone();
 
     let locked_stream: std::sync::MutexGuard<'_, Option<TcpStream>> =
         stream_opt_clone.lock().unwrap(); //stream_opt.lock().unwrap().as_ref().clone();
     warn!("After lock");
-    let xx = locked_stream.as_ref().unwrap();
+    let _xx = locked_stream.as_ref().unwrap();
     match locked_stream.as_ref().unwrap().write(msg) {
         Ok(_) => {
             locked_stream.as_ref().unwrap().flush();

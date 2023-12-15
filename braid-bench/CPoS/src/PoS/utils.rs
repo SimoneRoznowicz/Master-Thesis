@@ -25,7 +25,7 @@ pub fn from_bytes_to_proof(vec: Vec<u8>) -> Proof {
     let mut siblings: Vec<Sibling> = Vec::new();
     let len_hash = 32;
     let mut i = 0;
-    while (i < vec.len()) {
+    while i < vec.len() {
         let direction: Direction;
         if vec[i] == 0 {
             direction = Direction::Left;

@@ -8,13 +8,13 @@ pub enum Direction {
 }
 
 impl From<Left> for Direction {
-    fn from(left: Left) -> Self {
+    fn from(_left: Left) -> Self {
         Direction::Left
     }
 }
 
 impl From<Right> for Direction {
-    fn from(left: Right) -> Self {
+    fn from(_left: Right) -> Self {
         Direction::Right
     }
 }

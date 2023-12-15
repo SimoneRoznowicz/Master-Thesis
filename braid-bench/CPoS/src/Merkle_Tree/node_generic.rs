@@ -60,7 +60,7 @@ where
     /// assigns the corresponding Hash to every internal node in the underlying MerklTree.
     pub fn compute_hashes(&mut self) -> Hash {
         match self {
-            NodeGeneric::Empty(n) => Empty::get_hash(),
+            NodeGeneric::Empty(_n) => Empty::get_hash(),
             NodeGeneric::Leaf(n) => n.my_hash,
             NodeGeneric::Internal(n) => n.compute_hashes(),
         }
@@ -84,8 +84,8 @@ where
         K: Borrow<Q>,
         Q: Serialize + Eq,
     {
-        let my_hash = self.get_hash();
-        let hash_of_given_key = hash(&key).unwrap();
+        let _my_hash = self.get_hash();
+        let _hash_of_given_key = hash(&key).unwrap();
 
         match self {
             NodeGeneric::Internal(n) => n.find_path(key, index),
@@ -122,8 +122,8 @@ where
     {
         match &self {
             NodeGeneric::Internal(n) => n.get_siblings(key, index, siblings),
-            NodeGeneric::Leaf(n) => (),
-            NodeGeneric::Empty(n) => (),
+            NodeGeneric::Leaf(_n) => (),
+            NodeGeneric::Empty(_n) => (),
             _ => panic!(),
         }
     }
@@ -252,7 +252,7 @@ where
         let key_hash = hash(&key_to_add).unwrap();
         let direction = get_bit_direction(&key_hash.to_bytes(), index);
 
-        let mut side;
+        let side;
         if direction == true {
             side = &mut self.right;
         } else {
@@ -286,7 +286,7 @@ where
                     siblings.push(Sibling::new(n.my_hash.unwrap(), Left {}.into()))
                 }
                 NodeGeneric::Leaf(n) => siblings.push(Sibling::new(n.my_hash, Left {}.into())),
-                NodeGeneric::Empty(n) => {
+                NodeGeneric::Empty(_n) => {
                     siblings.push(Sibling::new(Empty::get_hash(), Left {}.into()))
                 }
             }
@@ -298,7 +298,7 @@ where
                     siblings.push(Sibling::new(n.my_hash.unwrap(), Right {}.into()))
                 }
                 NodeGeneric::Leaf(n) => siblings.push(Sibling::new(n.my_hash, Right {}.into())),
-                NodeGeneric::Empty(n) => {
+                NodeGeneric::Empty(_n) => {
                     siblings.push(Sibling::new(Empty::get_hash(), Right {}.into()))
                 }
             }
