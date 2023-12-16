@@ -44,7 +44,7 @@ pub struct Verifier {
     proofs: Vec<u8>,
     is_fair: bool,
     is_terminated: bool,
-    seed_map: HashMap<(u32, u32), (u8, bool)>, // k: (block_id,position) v: (byte_value, inclusion_proof_already_verified)
+    mapping_bytes: HashMap<(u32, u32), (u8, bool)>, // k: (block_id,position) v: (byte_value, inclusion_proof_already_verified)
     //hash_root: [u8; HASH_LENGTH],
     status: (Verification_Status, Fairness),
     counter: u8,  //FAKE TO BE ROMVED
@@ -58,6 +58,8 @@ impl Verifier {
         (sender, receiver) = mpsc::channel();
 
         let seed = rand::thread_rng().gen();
+        warn!("SEED INITIALLY == {}", seed);
+
         let mut verifier = Verifier::new(address, prover_address, sender.clone(), seed);
 
         info!("Verifier starting main_handler()");
@@ -101,7 +103,7 @@ impl Verifier {
             proofs,
             is_fair,
             is_terminated,
-            seed_map,
+            mapping_bytes: seed_map,
             //hash_root: hash,
             status,
             counter,
@@ -133,7 +135,7 @@ impl Verifier {
             }
             info!("Before Recv");
             match receiver.recv() {
-                Ok(notify_node) => {
+                Ok(mut notify_node) => {
                     match notify_node.notification {
                         Notification::Verification_Time => {
                             if is_to_verify {
@@ -144,7 +146,7 @@ impl Verifier {
                                 let mut counter_clone = self.counter;
                                 Some(thread::spawn(move || {
                                     if is_stopped == false {
-                                        info!("Verifiier received notification: Verification");
+                                        info!("Verifier received notification: Verification");
                                         handle_verification(
                                             &stream_clone,
                                             &notify_node.buff,
@@ -168,7 +170,8 @@ impl Verifier {
                             let sender_clone = sender.clone();
                             thread::spawn(move || {
                                 handle_inclusion_proof(
-                                    &notify_node.buff[1 + HASH_LENGTH..],
+                                    //&notify_node.buff[1 + HASH_LENGTH..],
+                                    &notify_node.buff,
                                     &sender_clone,
                                 );
                             });
@@ -176,7 +179,7 @@ impl Verifier {
                         Notification::Update => {
                             if !self.is_terminated {
                                 if notify_node.buff[0] == 0 {
-                                    self.proofs.extend(notify_node.buff);
+                                    self.proofs.extend_from_slice(&mut notify_node.buff[1..]);
                                 } else {
                                     if notify_node.buff[1] == 1 {
                                         info!("A wrong inclusion proof was found: terminate immediately");
@@ -228,8 +231,7 @@ impl Verifier {
         //tag is msg[0].           tag == 0 -> CHALLENGE    tag == 1 -> VERIFICATION    tag == 2 -> STOP (sending proofs)
         //seed is msg[1]
         let tag: u8 = 0;
-        let seed: u8 = rand::thread_rng().gen_range(0..=255);
-        let msg: [u8; 2] = [tag, seed];
+        let msg: [u8; 2] = [tag, self.seed];
         //send challenge to prover for the execution
         send_msg(&mut self.stream, &msg);
         info!("Challenge sent to the prover...");
@@ -245,12 +247,11 @@ impl Verifier {
         info!("Starting verify_correctness_proofs ***");
         let mut block_id: u32 = INITIAL_BLOCK_ID;
         let mut position: u32 = INITIAL_POSITION;
-        let seed = msg[1]; //sbagliato lo devi prendere da self il seed
-        let mut seed_sequence: Vec<(u32, u32)> = vec![];
+        let mut block_ids_pos: Vec<(u32, u32)> = vec![];
 
         for iteration_c in 0..msg.len() {
-            (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
-            seed_sequence.push((block_id, position));
+            (block_id, position, self.seed) = random_path_generator(self.seed, iteration_c as u8);
+            block_ids_pos.push((block_id, position));
             //dovrebbe essere una map con key u8 ovvero block_id e value u8 ovvero la position del byte nel block
         }
 
@@ -262,17 +263,20 @@ impl Verifier {
         let mut verified_blocks_and_positions: Vec<u8> = Vec::new();
         verified_blocks_and_positions.push(3); //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
         while i < msg.len() as u32 {
-            self.seed_map.insert((block_id, position), (0, false));
-            if !self.check_block(
-                seed_sequence[i as usize].0,
-                seed_sequence[i as usize].1,
-                msg[(i + 1) as usize],
+            self.mapping_bytes.insert((block_id, position), (0, false));
+            if !self.check_byte_value(
+                block_ids_pos[i as usize].0,
+                block_ids_pos[i as usize].1,
+                msg[i as usize],
             ) {
+                warn!("Found incorrect byte value while checking");
+                warn!("msg after check failure == {:?}", msg);
+
                 return false;
             }
             //send request Merkle Tree for each of the proof: send tag 3 followed by the indexes (block_ids), followed by the positions
             let block_id = i.to_le_bytes();
-            let position = seed_sequence[i as usize].1.to_le_bytes();
+            let position = block_ids_pos[i as usize].1.to_le_bytes();
             verified_blocks_and_positions.extend(block_id);
             verified_blocks_and_positions.extend(position);
             i = i + ((avg_step + random_step) as u32);
@@ -287,7 +291,7 @@ impl Verifier {
     //10 / 4  = 2
     //8 / 4  = 2
     //10 % 4 == 2
-    fn check_block(&mut self, block_id: u32, pos_in_block: u32, byte_received: u8) -> bool {
+    fn check_byte_value(&mut self, block_id: u32, pos_in_block: u32, byte_received: u8) -> bool {
         let block_group = generate_block_group((block_id / 4).try_into().unwrap());
         //block from [0 to 3] within the blockgroup
         //let block_num_in_group = pos_in_block % 4;
@@ -304,9 +308,11 @@ impl Verifier {
         // let fragment = partblock[(pos_in_block/4) as usize];
         // let byte_value = fragment.to_le_bytes()[(pos_in_block % 4) as usize];
 
-        self.seed_map
+        self.mapping_bytes
             .insert((block_id, pos_in_block), (byte_value, false));
 
+        warn!("byte_arr == {:?}",array_u8);
+        warn!("byte_value == {} and byte_received == {}",byte_value,byte_received);
         return byte_value == byte_received;
     }
 }
@@ -337,7 +343,10 @@ fn handle_verification(
 ) {
     //note that new_proofs e proofs hanno gia rimosso il primo byte del tag
     //Update vector of proofs
+    error!("Proofs byte before extending: {:?}", proofs);
     proofs.extend(new_proofs);
+    error!("Proofs byte after extending: {:?}", proofs);
+
     send_update_notification(new_proofs, sender);
     //verify_time_challenge_bound() should return three cases:
     //Still not verified
@@ -437,22 +446,6 @@ fn verify_time_challenge_bound(counter: u8) -> Time_Verification_Status {
     }
     //error!("counter == {}", counter);
     return Time_Verification_Status::Insufficient_Proofs;
-}
-
-fn sample_generate_verify(msg: &[u8], _i: u32) -> bool {
-    let mut block_id: u32 = INITIAL_BLOCK_ID; // Given parameter
-    let mut position: u32 = INITIAL_POSITION; //Given parameter
-    let seed = msg[1]; //sbagliato lo devi prendere da self il seed
-
-    let proof_batch: [u8; BATCH_SIZE] = [0; BATCH_SIZE];
-    let mut seed_sequence: Vec<(u32, u32)> = vec![];
-    for iteration_c in 0..proof_batch.len() {
-        (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
-        seed_sequence.push((block_id, position));
-    }
-    //generate_block(i);
-    //verify_proof(i);
-    return false;
 }
 
 fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a [u8] {

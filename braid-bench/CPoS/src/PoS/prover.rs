@@ -21,7 +21,7 @@ use crate::block_generation::utils::Utils::{
     NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, NUM_BYTES_IN_BLOCK,
 };
 use crate::communication::client::{send_msg};
-use crate::communication::handle_prover::random_path_generator;
+use crate::communication::handle_prover::random_path_generator1;
 use crate::communication::structs::Notification;
 use crate::Merkle_Tree::mpt::MerkleTree;
 
@@ -37,6 +37,7 @@ pub struct Prover {
     stream_opt: Option<TcpStream>,
     //unit: Vec<FragmentGroup>,   //PROVVISORIO: POI VOGLIO AVERE SOLO UN FILE
     seed: u8,
+    iteration: u32,
     shared_file: Arc<Mutex<File>>,
 }
 
@@ -99,6 +100,7 @@ impl Prover {
             verifier_address,
             stream_opt: stream,
             seed: 0, //default value
+            iteration: 0,
             shared_file,
         };
 
@@ -138,12 +140,14 @@ impl Prover {
                         is_started = true;
                         info!("Start Notification received");
                         self.seed = notify_node.buff[1];
+                        info!("buff AT THE START == {:?}", notify_node.buff);
 
-                        create_and_send_proof_batches(
+                        (self.seed,self.iteration) = create_and_send_proof_batches(
                             &self.stream_opt,
-                            self.seed,
+                            self.seed,   //DEFAULT HASH
                             &receiver,
                             &self.shared_file,
+                            self.iteration,
                         );
                     }
                     Notification::Stop => {
@@ -162,11 +166,12 @@ impl Prover {
                 },
                 Err(TryRecvError::Empty) => {
                     if is_started {
-                        create_and_send_proof_batches(
+                        (self.seed,self.iteration) = create_and_send_proof_batches(  
                             &self.stream_opt,
-                            self.seed,
+                            self.seed,    
                             &receiver,
                             &self.shared_file,
+                            self.iteration,
                         );
                     }
                     info!("In TryRecvError::Empty send batches");
@@ -252,25 +257,32 @@ pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a [u8]
 
 pub fn create_and_send_proof_batches(
     stream: &Option<TcpStream>,
-    seed: u8,
+    mut seed: u8,
     _receiver: &Receiver<NotifyNode>,
     file: &Arc<Mutex<File>>,
-) {
+    mut iteration: u32,
+) -> (u8,u32) {
     let mut block_id: u32 = INITIAL_BLOCK_ID; // Given parameter
     let mut position: u32 = INITIAL_POSITION; // Given parameter
     let mut proof_batch: [u8; BATCH_SIZE] = [0; BATCH_SIZE];
     debug!("Preparing batch of proofs.");
-
-    for iteration_c in 0..proof_batch.len() {
-        (block_id, position) = random_path_generator(block_id, iteration_c, position, seed);
-        proof_batch[iteration_c] = read_byte_from_file(file, block_id, position);
+    error!("SEED == {}", seed);
+    let initIteration = iteration;
+    while(iteration < initIteration+proof_batch.len() as u32){
+        //PUOI USARE SEMPRE SOLO IL SEED INVECE DI USARE ANCHE block_id, iteration_c, position
+        (block_id, position, seed) = random_path_generator1(seed,iteration as u8);
+        proof_batch[(iteration-initIteration)as usize] = read_byte_from_file(file, block_id, position);
+        error!("seed == {}", seed);
+        iteration+=1;
     }
+
     let mut response_msg: [u8; BATCH_SIZE + 1] = [1; BATCH_SIZE + 1];
     //the tag is 1
     response_msg[1..].copy_from_slice(&proof_batch);
     debug!("Before send_msg_prover");
     send_msg(stream.as_ref().unwrap(), &response_msg);
     debug!("Batch of proofs sent from prover to verifier");
+    return (seed,iteration);
 }
 
 pub fn send_stop_notification(sender: &Sender<NotifyNode>) {

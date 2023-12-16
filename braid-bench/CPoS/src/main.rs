@@ -39,6 +39,10 @@ fn set_logger() {
 // }
 
 
+
+// block_id == 0 while position == 406227  225
+
+
 /*A block_group is made of a Vec<[u64,4]>: a Vector containing (2^16 = 65536 elements).
     So in total: there are 2^18 = 262144 u64 elements --> 2^21 = 2097152 u8 elements in a block_group
     A single block is instead made of u8_in_a_block_group/4 = 2^19 = 524288 total bytes
