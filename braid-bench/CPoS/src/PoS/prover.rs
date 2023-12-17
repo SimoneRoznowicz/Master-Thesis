@@ -65,13 +65,13 @@ impl Prover {
             .write(true)
             .open("test_main.bin")
             .unwrap();
-        let mut file2 = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .read(true)
-        .write(true)
-        .open("test_main.txt")
-        .unwrap();
+        // let mut file2 = OpenOptions::new()
+        // .create(true)
+        // .append(true)
+        // .read(true)
+        // .write(true)
+        // .open("test_main.txt")
+        // .unwrap();
 
         let shared_file = Arc::new(Mutex::new(new_file));
         {
@@ -81,34 +81,34 @@ impl Prover {
                 let block_group = generate_block_group(i);
                 debug!("4 Blocks generated");
                 let mut cc: u64 = 0;
-                for i in 0..GROUP_SIZE {  
+                for i in 0..GROUP_SIZE { 
+                    debug!("Group Size iteraztion i=={}",i); 
                     for j in 0..block_group.len() {
                         let byte_fragment = block_group[j][i].to_le_bytes();
                         file.write_all(&byte_fragment).unwrap();
-                        for b in byte_fragment{
-                            if (cc % 20 == 0){
-                                let ccstr = cc.to_string()+ "* ";
-                                file2.write(ccstr.as_bytes());    
-                            }
-                            let bstr = b.to_string() + " "; 
-                            file2.write(bstr.as_bytes());
-                            cc += 1;
-                        }
-                        //file2.write_all(&byte_fragment).unwrap();
+                        // for b in byte_fragment{
+                        //     if (cc % 20 == 0){
+                        //         let ccstr = cc.to_string()+ "* ";
+                        //         file2.write(ccstr.as_bytes());    
+                        //     }
+                        //     let bstr = b.to_string() + " "; 
+                        //     file2.write(bstr.as_bytes());
+                        //     cc += 1;
+                        // }
                     }
                 }
             }  
-            let mut metadata = file.metadata();
-            warn!("Length file == {}", metadata.unwrap().len());
-            file.seek(SeekFrom::Start(0)).unwrap();
-            let mut buffer = [0; 1];
-            match file.read_exact(&mut buffer) {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("Error reading file == {:?}", e)
-                }
-            };
-            warn!("BUFFER AAA == {:?}", buffer);
+            // let mut metadata = file.metadata();
+            // warn!("Length file == {}", metadata.unwrap().len());
+            // file.seek(SeekFrom::Start(0)).unwrap();
+            // let mut buffer = [0; 1];
+            // match file.read_exact(&mut buffer) {
+            //     Ok(_) => {}
+            //     Err(e) => {
+            //         error!("Error reading file == {:?}", e)
+            //     }
+            // };
+            // warn!("BUFFER AAA == {:?}", buffer);
             // let mut buffer = Vec::new();
             // match file.read_to_end(&mut buffer) {
             //     Ok(_) => {},

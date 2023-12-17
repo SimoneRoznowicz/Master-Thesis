@@ -19,7 +19,7 @@ use crate::{
         utils::Utils::{
             BATCH_SIZE, VERIFIABLE_RATIO, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BYTES_PER_BLOCK_ID,
             NUM_BYTES_PER_POSITION,
-        },
+        }, blockgen::GROUP_SIZE,
     },
     communication::{
         client::send_msg,
@@ -58,7 +58,7 @@ impl Verifier {
         (sender, receiver) = mpsc::channel();
 
         let seed = rand::thread_rng().gen();
-        warn!("SEED INITIALLY == {}", seed);
+        debug!("SEED INITIALLY == {}", seed);
 
         let mut verifier = Verifier::new(address, prover_address, sender.clone(), seed);
 
@@ -83,8 +83,8 @@ impl Verifier {
                     &stream.peer_addr().unwrap()
                 )
             }
-            Err(_) => {
-                error!("Error in connection")
+            Err(e) => {
+                error!("Error in connection: {}", e)
             }
         };
         let stream = stream_option.unwrap();
@@ -256,24 +256,36 @@ impl Verifier {
             //dovrebbe essere una map con key u8 ovvero block_id e value u8 ovvero la position del byte nel block
         }
 
-        let mut i: u32 = 0;
+
         let proofs_len = msg.len() as u32;
-        let avg_step = (VERIFIABLE_RATIO * proofs_len as f32).round() as i32;
-        let random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
+        let mut verfiable_ratio = VERIFIABLE_RATIO;
+        if VERIFIABLE_RATIO == 0.0 {
+            warn!("VERIFIABLE_RATIO was set to 0: it was reset to 0.5");
+            verfiable_ratio = 0.5;
+        }
+        let avg_step = (1.0/verfiable_ratio).floor() as i32;
+        let mut i: i32 = -avg_step;
+        let mut random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
+        info!("Average Step == {} + random Step == {}", avg_step, random_step);
 
         let mut verified_blocks_and_positions: Vec<u8> = Vec::new();
+        i = (i + ((avg_step + random_step) as i32)).abs();
+        random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
+
+        info!("i == {}, Average Step == {} + random Step == {}",i, avg_step, random_step);
+
         verified_blocks_and_positions.push(3); //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
-        while i < msg.len() as u32 {
+        while i < msg.len() as i32 {
             self.mapping_bytes.insert((block_id, position), (0, false));
             warn!("V: Iteration: {}, block_id = {}, position = {}, value = {}", i, block_ids_pos[i as usize].0, block_ids_pos[i as usize].1, msg[i as usize]);
+            warn!("Indexxx == {}, msg before check == {:?}", i, msg);
+
             if !self.check_byte_value(
                 block_ids_pos[i as usize].0,
                 block_ids_pos[i as usize].1,
                 msg[i as usize],
             ) {
                 warn!("Found incorrect byte value while checking");
-                warn!("msg after check failure == {:?}", msg);
-
                 return false;
             }
             //send request Merkle Tree for each of the proof: send tag 3 followed by the indexes (block_ids), followed by the positions
@@ -281,7 +293,9 @@ impl Verifier {
             let position = block_ids_pos[i as usize].1.to_le_bytes();
             verified_blocks_and_positions.extend(block_id);
             verified_blocks_and_positions.extend(position);
-            i = i + ((avg_step + random_step) as u32);
+            i = i + ((avg_step + random_step) as i32);
+            info!("Average Step == {} + random Step == {}", avg_step, random_step);
+            random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
         }
 
         send_msg(&self.stream, &verified_blocks_and_positions);
@@ -294,33 +308,27 @@ impl Verifier {
     //8 / 4  = 2
     //10 % 4 == 2
     fn check_byte_value(&mut self, block_id: u32, pos_in_block: u32, byte_received: u8) -> bool {
-        let block_group = generate_block_group((block_id / 4).try_into().unwrap());
-        warn!("generate_block_group with input == {}", block_id / 4);
+        let block_group: Vec<[u64; GROUP_SIZE]> = generate_block_group((block_id / GROUP_SIZE as u32).try_into().unwrap());
+        warn!("generate_block_group with input == {}", block_id / GROUP_SIZE as u32);
         //block from [0 to 3] within the blockgroup
         //let block_num_in_group = pos_in_block % 4;
-        let selected_arr: [u64; 1] = block_group[(pos_in_block/(8)) as usize]; //4 cells made of 8 bytes each
-        let selected_arr_x: [u64; 1] = block_group[(pos_in_block/(8)-1) as usize]; //4 cells made of 8 bytes each
-        let selected_arr_y: [u64; 1] = block_group[(pos_in_block/(8)+1) as usize]; //4 cells made of 8 bytes each
+        let selected_arr: [u64; GROUP_SIZE] = block_group[(pos_in_block/8) as usize]; //4 cells made of 8 bytes each
 
-        let mut array_u8: [u8; 8] = [0;8];
-        let mut array_u8_x: [u8; 8] = [0;8];
-        let mut array_u8_y: [u8; 8] = [0;8];
+        let mut array_u8: [u8; 8*GROUP_SIZE] = [0;8*GROUP_SIZE];
 
-        for (i, &element) in selected_arr_x.iter().enumerate() {
-            let bytes = element.to_le_bytes();
-            array_u8_x[i * 8..(i + 1) * 8].copy_from_slice(&bytes);
-        }
-        for (i, &element) in selected_arr_y.iter().enumerate() {
-            let bytes = element.to_le_bytes();
-            array_u8_y[i * 8..(i + 1) * 8].copy_from_slice(&bytes);
-        }
         for (i, &element) in selected_arr.iter().enumerate() {
             let bytes = element.to_le_bytes();
             array_u8[i * 8..(i + 1) * 8].copy_from_slice(&bytes);
         }
-        let byte_value = array_u8[(pos_in_block % (8)) as usize];
-        let byte_value_x = array_u8_x[(pos_in_block % (8)) as usize];
-        let byte_value_y = array_u8_y[(pos_in_block % (8)) as usize];
+
+        //PROVA A TENERE QUA SOTTO MODULO 8 E NON 32 ANCHE CON SIZE 4
+        //let byte_value   = array_u8[(pos_in_block % 8) as usize];
+        // let byte_value_2 = array_u8[8 + (pos_in_block % 8) as usize];
+        // let byte_value_3 = array_u8[16 + (pos_in_block % 8) as usize];
+        // let byte_value_4 = array_u8[24 + (pos_in_block % 8) as usize];
+        let byte_value = array_u8[(block_id % GROUP_SIZE as u32) as usize*8 + (pos_in_block % 8) as usize];
+
+
 
         // let partblock = block_group[(block_id % 4) as usize];
         // SBAGLIATOOOOOOOO SERVE POSITION NELL INDICE DEL BLOCK SOPRA CREDO
@@ -331,9 +339,11 @@ impl Verifier {
         //warn!("byte_arr_x val == {} byte_arr_x == {:?}",byte_value_x,array_u8_x);
         //warn!("byte_arr_y val == {} byte_arr_y == {:?}",byte_value_y,array_u8_y);
         
-        warn!("byte_arr == {:?}",selected_arr);
+        warn!("byte_arr_32 == {:?}",selected_arr);
         warn!("byte_arr == {:?}",array_u8);
-        warn!("byte_value == {} and byte_received == {}",byte_value,byte_received);
+        //warn!("byte_val == {}, byte_val2 == {}, byte_val3 == {}, byte_val4 == {}", byte_value, byte_value_2, byte_value_3, byte_value_4);
+
+        warn!("byte_value_real == {} and byte_received == {}",byte_value,byte_received);
 
         self.mapping_bytes
         .insert((block_id, pos_in_block), (byte_value, false));
