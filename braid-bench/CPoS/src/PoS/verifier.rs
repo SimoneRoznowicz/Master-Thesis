@@ -237,8 +237,9 @@ impl Verifier {
         info!("Challenge sent to the prover...");
     }
 
+    //V: Iteration: 0, block_id = 3, position = 195687, value = 192
+    //P: Iteration: 0, block_id = 3, position = 195687, value = 192
     //Verify some of the proofs: generate the seed correspondent to all the proofs.
-
     //[0,*1,2,*3,4,5,*6,*7,8,*9]
     //[1,2,3,4,5]
     //update eg.  i = i + (1/3)*10
@@ -249,8 +250,8 @@ impl Verifier {
         let mut position: u32 = INITIAL_POSITION;
         let mut block_ids_pos: Vec<(u32, u32)> = vec![];
 
-        for iteration_c in 0..msg.len() {
-            (block_id, position, self.seed) = random_path_generator(self.seed, iteration_c as u8);
+        for iteration in 0..msg.len() {
+            (block_id, position, self.seed) = random_path_generator(self.seed, iteration as u8);
             block_ids_pos.push((block_id, position));
             //dovrebbe essere una map con key u8 ovvero block_id e value u8 ovvero la position del byte nel block
         }
@@ -264,6 +265,7 @@ impl Verifier {
         verified_blocks_and_positions.push(3); //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
         while i < msg.len() as u32 {
             self.mapping_bytes.insert((block_id, position), (0, false));
+            warn!("V: Iteration: {}, block_id = {}, position = {}, value = {}", i, block_ids_pos[i as usize].0, block_ids_pos[i as usize].1, msg[i as usize]);
             if !self.check_byte_value(
                 block_ids_pos[i as usize].0,
                 block_ids_pos[i as usize].1,
@@ -293,26 +295,49 @@ impl Verifier {
     //10 % 4 == 2
     fn check_byte_value(&mut self, block_id: u32, pos_in_block: u32, byte_received: u8) -> bool {
         let block_group = generate_block_group((block_id / 4).try_into().unwrap());
+        warn!("generate_block_group with input == {}", block_id / 4);
         //block from [0 to 3] within the blockgroup
         //let block_num_in_group = pos_in_block % 4;
-        let selected_arr: [u64; 4] = block_group[(pos_in_block/(4*8)) as usize]; //4 cells made of 8 bytes each
-        let mut array_u8: [u8; 32] = [0;4*8];
+        let selected_arr: [u64; 1] = block_group[(pos_in_block/(8)) as usize]; //4 cells made of 8 bytes each
+        let selected_arr_x: [u64; 1] = block_group[(pos_in_block/(8)-1) as usize]; //4 cells made of 8 bytes each
+        let selected_arr_y: [u64; 1] = block_group[(pos_in_block/(8)+1) as usize]; //4 cells made of 8 bytes each
+
+        let mut array_u8: [u8; 8] = [0;8];
+        let mut array_u8_x: [u8; 8] = [0;8];
+        let mut array_u8_y: [u8; 8] = [0;8];
+
+        for (i, &element) in selected_arr_x.iter().enumerate() {
+            let bytes = element.to_le_bytes();
+            array_u8_x[i * 8..(i + 1) * 8].copy_from_slice(&bytes);
+        }
+        for (i, &element) in selected_arr_y.iter().enumerate() {
+            let bytes = element.to_le_bytes();
+            array_u8_y[i * 8..(i + 1) * 8].copy_from_slice(&bytes);
+        }
         for (i, &element) in selected_arr.iter().enumerate() {
-            let bytes = element.to_be_bytes();
+            let bytes = element.to_le_bytes();
             array_u8[i * 8..(i + 1) * 8].copy_from_slice(&bytes);
         }
-        let byte_value = array_u8[(pos_in_block % (4*8)) as usize];
+        let byte_value = array_u8[(pos_in_block % (8)) as usize];
+        let byte_value_x = array_u8_x[(pos_in_block % (8)) as usize];
+        let byte_value_y = array_u8_y[(pos_in_block % (8)) as usize];
 
         // let partblock = block_group[(block_id % 4) as usize];
-        // //SBAGLIATOOOOOOOO SERVE POSITION NELL INDICE DEL BLOCK SOPRA CREDO
+        // SBAGLIATOOOOOOOO SERVE POSITION NELL INDICE DEL BLOCK SOPRA CREDO
         // let fragment = partblock[(pos_in_block/4) as usize];
         // let byte_value = fragment.to_le_bytes()[(pos_in_block % 4) as usize];
 
-        self.mapping_bytes
-            .insert((block_id, pos_in_block), (byte_value, false));
 
+        //warn!("byte_arr_x val == {} byte_arr_x == {:?}",byte_value_x,array_u8_x);
+        //warn!("byte_arr_y val == {} byte_arr_y == {:?}",byte_value_y,array_u8_y);
+        
+        warn!("byte_arr == {:?}",selected_arr);
         warn!("byte_arr == {:?}",array_u8);
         warn!("byte_value == {} and byte_received == {}",byte_value,byte_received);
+
+        self.mapping_bytes
+        .insert((block_id, pos_in_block), (byte_value, false));
+
         return byte_value == byte_received;
     }
 }

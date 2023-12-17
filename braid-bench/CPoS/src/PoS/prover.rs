@@ -65,6 +65,13 @@ impl Prover {
             .write(true)
             .open("test_main.bin")
             .unwrap();
+        let mut file2 = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .read(true)
+        .write(true)
+        .open("test_main.txt")
+        .unwrap();
 
         let shared_file = Arc::new(Mutex::new(new_file));
         {
@@ -73,23 +80,42 @@ impl Prover {
             for i in 0..NUM_BLOCK_GROUPS_PER_UNIT {
                 let block_group = generate_block_group(i);
                 debug!("4 Blocks generated");
+                let mut cc: u64 = 0;
                 for i in 0..GROUP_SIZE {  
                     for j in 0..block_group.len() {
                         let byte_fragment = block_group[j][i].to_le_bytes();
                         file.write_all(&byte_fragment).unwrap();
+                        for b in byte_fragment{
+                            if (cc % 20 == 0){
+                                let ccstr = cc.to_string()+ "* ";
+                                file2.write(ccstr.as_bytes());    
+                            }
+                            let bstr = b.to_string() + " "; 
+                            file2.write(bstr.as_bytes());
+                            cc += 1;
+                        }
+                        //file2.write_all(&byte_fragment).unwrap();
                     }
                 }
             }  
             let mut metadata = file.metadata();
             warn!("Length file == {}", metadata.unwrap().len());
+            file.seek(SeekFrom::Start(0)).unwrap();
+            let mut buffer = [0; 1];
+            match file.read_exact(&mut buffer) {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("Error reading file == {:?}", e)
+                }
+            };
+            warn!("BUFFER AAA == {:?}", buffer);
+            // let mut buffer = Vec::new();
+            // match file.read_to_end(&mut buffer) {
+            //     Ok(_) => {},
+            //     Err(e) => {info!("error == {:?}", e)},
+            // };
+            // info!("{:?}", buffer);
         }
-        // file.seek(SeekFrom::Start(0)).unwrap();
-
-        // let mut buffer = Vec::new();
-        // match shared_file.read_to_end(&mut buffer) {
-        //     Ok(_) => {},
-        //     Err(e) => {info!("error == {:?}", e)},
-        // };
 
         let mut encoded: Vec<u8> = bincode::serialize(&unit).unwrap();
         let _enc_slice: &[u8] = encoded.as_mut_slice();
@@ -267,12 +293,14 @@ pub fn create_and_send_proof_batches(
     let mut proof_batch: [u8; BATCH_SIZE] = [0; BATCH_SIZE];
     debug!("Preparing batch of proofs.");
     error!("SEED == {}", seed);
-    let initIteration = iteration;
-    while(iteration < initIteration+proof_batch.len() as u32){
+    let init_iteration = iteration;
+    while(iteration < init_iteration+proof_batch.len() as u32){
         //PUOI USARE SEMPRE SOLO IL SEED INVECE DI USARE ANCHE block_id, iteration_c, position
         (block_id, position, seed) = random_path_generator1(seed,iteration as u8);
-        proof_batch[(iteration-initIteration)as usize] = read_byte_from_file(file, block_id, position);
-        error!("seed == {}", seed);
+
+        proof_batch[(iteration-init_iteration)as usize] = read_byte_from_file(file, block_id, position);
+        warn!("P: Iteration: {}, block_id = {}, position = {}, value = {}", iteration-init_iteration, block_id, position, proof_batch[(iteration-init_iteration)as usize]);
+        
         iteration+=1;
     }
 

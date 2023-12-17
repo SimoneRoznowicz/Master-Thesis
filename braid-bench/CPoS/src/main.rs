@@ -65,7 +65,7 @@ fn main() {
         //     bufu8.extend_from_slice(&bytes);
         // }
 
-        let block_group: Vec<[u64; 4]> = generate_block_group(0);
+        let block_group: Vec<[u64; 1]> = generate_block_group(0);
         println!("4 Blocks generated");
         println!("block Group len == {}", block_group.len());
         // print!("block_group == {:?}", block_group);
@@ -132,7 +132,7 @@ fn main() {
         thread::spawn(move || {
             Prover::start(addres_prover_clone, addres_verifier_clone);
         });
-        thread::sleep(Duration::from_secs(9));
+        thread::sleep(Duration::from_secs(16));
         Verifier::start(address_verifier, address_prover);
         thread::sleep(Duration::from_secs(100));
     }
