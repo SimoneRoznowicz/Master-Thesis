@@ -155,12 +155,11 @@ impl Prover {
     }
 
     pub fn main_handler(&mut self, receiver: &Receiver<NotifyNode>) {
-        let _counter = 0;
+        let counter = 0;
         let mut is_started = false;
         // while counter < MAX_NUM_PROOFS {
         loop {
             match receiver.try_recv() {
-                //PROBLEMA: QUA SI FERMA SEMPRE. MI SERVIREBBE UNA NOTIFICA CONTINUE A OGNI CICLO. INVECE IO VORREI UNA NOTIFICA STOP QUANDO SERVE E NEL RESTO DEL TEMPO RIMANE CONTINUE
                 Ok(notify_node) => match notify_node.notification {
                     Notification::Start => {
                         is_started = true;
@@ -178,7 +177,7 @@ impl Prover {
                     }
                     Notification::Stop => {
                         info!("Received Stop signal: the prover stopped sending proof batches");
-                        break;
+                        is_started = false;
                     }
                     Notification::Create_Inclusion_Proofs => {
                         self.create_inclusion_proofs(&notify_node.buff);
@@ -200,7 +199,6 @@ impl Prover {
                             self.iteration,
                         );
                     }
-                    info!("In TryRecvError::Empty send batches");
                 }
                 Err(TryRecvError::Disconnected) => {
                     error!("The prover has been disconnected");
@@ -213,6 +211,8 @@ impl Prover {
     }
 
     pub fn create_inclusion_proofs(&mut self, msg: &[u8]) {
+        //SO THE CREATED -MESSAGE WILL BE EVENTALLY: TAG,HASH,block_id,byte_position,byte_value,proof
+        info!("Started creating Inclusion Proofs");
         let mut block_ids: Vec<u32> = Vec::new();
         let mut positions: Vec<u32> = Vec::new();
         let mut i = 1;
@@ -233,11 +233,15 @@ impl Prover {
 
             i += NUM_BYTES_PER_BLOCK_ID + NUM_BYTES_PER_POSITION;
         }
+        debug!("Block_ids == {:?}", block_ids);
+        debug!("Block_ids == {:?}", positions);
 
         // Generate and send all the requested Inclusion Proofs:
         // Send a buffer containing in order: tag, hash and proof
+        info!("Generate Merkle Tree and send rach created inclusion proofs");
         for (indx, block_id) in block_ids.iter().enumerate() {
             //send root_hash + proof
+            debug!("Created Merkle Tree");
             let mut merkle_tree = self.generate_merkle_tree(*block_id);
             let proof = merkle_tree.prove(positions[indx]);
 

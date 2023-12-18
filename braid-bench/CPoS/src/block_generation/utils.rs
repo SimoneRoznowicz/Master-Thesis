@@ -9,7 +9,7 @@ pub mod Utils {
     // position in the block is u32 type
     pub static NUM_BYTES_IN_BLOCK: u32 = 524288; // 2^19 bytes
     pub static NUM_FRAGMENTS_PER_UNIT: u32 = 1000;
-    pub static NUM_BLOCK_GROUPS_PER_UNIT: u64 = 1;
+    pub static NUM_BLOCK_GROUPS_PER_UNIT: u64 = 5;
     pub static NUM_BLOCKS_PER_UNIT: usize = NUM_BLOCK_GROUPS_PER_UNIT as usize *GROUP_SIZE;
     pub const BATCH_SIZE: usize = 10; //Indicates the batch size of proofs that should be sent to the verifier at every
     pub static MAX_NUM_PROOFS: usize = BATCH_SIZE * 100;

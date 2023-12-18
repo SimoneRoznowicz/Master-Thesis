@@ -150,7 +150,7 @@ fn main() {
         thread::spawn(move || {
             Prover::start(addres_prover_clone, addres_verifier_clone);
         });
-        thread::sleep(Duration::from_secs(9));
+        //thread::sleep(Duration::from_secs(5));
         Verifier::start(address_verifier, address_prover);
         thread::sleep(Duration::from_secs(100));
     }

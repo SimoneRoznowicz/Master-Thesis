@@ -73,20 +73,36 @@ impl Verifier {
         seed: u8,
     ) -> Verifier {
         //return Verifier {address, prover_address, seed}
-        //let mut stream: Option<TcpStream> = None;
-        let stream_option = TcpStream::connect(prover_address.clone());
-        match &stream_option {
-            Ok(stream) => {
-                info!(
-                    "\nConnection from verifier at {} and Prover at {} successfully created ",
-                    &stream.local_addr().unwrap(),
-                    &stream.peer_addr().unwrap()
-                )
+        // let mut stream: Option<TcpStream> = None;
+
+        // let stream_option = TcpStream::connect(prover_address.clone());
+        // match &stream_option {
+        //     Ok(stream) => {
+        //         info!(
+        //             "\nConnection from verifier at {} and Prover at {} successfully created ",
+        //             &stream.local_addr().unwrap(),
+        //             &stream.peer_addr().unwrap()
+        //         )
+        //     }
+        //     Err(e) => {
+        //         error!("Error in connection: {}", e)
+        //     }
+        // };
+        let mut stream_option: Result<TcpStream, std::io::Error>;
+        loop {
+            stream_option = TcpStream::connect(prover_address.clone());
+            match stream_option {
+                Ok(_) => {
+                    info!("Connection Successful!");
+                    break;
+                },
+                Err(e) => {
+                    warn!("Connection was not possible. Retry in 2 seconds...");
+                    thread::sleep(Duration::from_secs(2));
+                },
             }
-            Err(e) => {
-                error!("Error in connection: {}", e)
-            }
-        };
+        }
+    
         let stream = stream_option.unwrap();
         let proofs: Vec<u8> = Vec::new();
         let status = (Verification_Status::Executing, Fairness::Undecided);
@@ -133,7 +149,6 @@ impl Verifier {
                 info!("Verifier prepares the challenge");
                 self.challenge();
             }
-            info!("Before Recv");
             match receiver.recv() {
                 Ok(mut notify_node) => {
                     match notify_node.notification {
@@ -167,6 +182,7 @@ impl Verifier {
                             self.verify_correctness_proofs(&notify_node.buff);
                         }
                         Notification::Handle_Inclusion_Proof => {
+                            info!("Handle_Inclusion_Proof started");
                             let sender_clone = sender.clone();
                             thread::spawn(move || {
                                 handle_inclusion_proof(
@@ -207,7 +223,6 @@ impl Verifier {
                             }
                             self.status = (Verification_Status::Terminated, is_fair);
                             info!("\n***************************\nResult of the Challenge:{:?}\n***************************", self.status);
-                            //if needed you can reset the status here
                             break;
                         }
                         _ => {
@@ -266,7 +281,7 @@ impl Verifier {
         let avg_step = (1.0/verfiable_ratio).floor() as i32;
         let mut i: i32 = -avg_step;
         let mut random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-        info!("Average Step == {} + random Step == {}", avg_step, random_step);
+        // info!("Average Step == {} + random Step == {}", avg_step, random_step);
 
         let mut verified_blocks_and_positions: Vec<u8> = Vec::new();
         i = (i + ((avg_step + random_step) as i32)).abs();
@@ -297,7 +312,7 @@ impl Verifier {
             info!("Average Step == {} + random Step == {}", avg_step, random_step);
             random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
         }
-
+        info!("Successful Correctness Verification");
         send_msg(&self.stream, &verified_blocks_and_positions);
         return true;
     }
@@ -309,7 +324,7 @@ impl Verifier {
     //10 % 4 == 2
     fn check_byte_value(&mut self, block_id: u32, pos_in_block: u32, byte_received: u8) -> bool {
         let block_group: Vec<[u64; GROUP_SIZE]> = generate_block_group((block_id / GROUP_SIZE as u32).try_into().unwrap());
-        warn!("generate_block_group with input == {}", block_id / GROUP_SIZE as u32);
+        // warn!("generate_block_group with input == {}", block_id / GROUP_SIZE as u32);
         //block from [0 to 3] within the blockgroup
         //let block_num_in_group = pos_in_block % 4;
         let selected_arr: [u64; GROUP_SIZE] = block_group[(pos_in_block/8) as usize]; //4 cells made of 8 bytes each
@@ -334,13 +349,9 @@ impl Verifier {
         // SBAGLIATOOOOOOOO SERVE POSITION NELL INDICE DEL BLOCK SOPRA CREDO
         // let fragment = partblock[(pos_in_block/4) as usize];
         // let byte_value = fragment.to_le_bytes()[(pos_in_block % 4) as usize];
-
-
-        //warn!("byte_arr_x val == {} byte_arr_x == {:?}",byte_value_x,array_u8_x);
-        //warn!("byte_arr_y val == {} byte_arr_y == {:?}",byte_value_y,array_u8_y);
         
-        warn!("byte_arr_32 == {:?}",selected_arr);
-        warn!("byte_arr == {:?}",array_u8);
+        //warn!("byte_arr_32 == {:?}",selected_arr);
+        //warn!("byte_arr == {:?}",array_u8);
         //warn!("byte_val == {}, byte_val2 == {}, byte_val3 == {}, byte_val4 == {}", byte_value, byte_value_2, byte_value_3, byte_value_4);
 
         warn!("byte_value_real == {} and byte_received == {}",byte_value,byte_received);
@@ -378,9 +389,9 @@ fn handle_verification(
 ) {
     //note that new_proofs e proofs hanno gia rimosso il primo byte del tag
     //Update vector of proofs
-    error!("Proofs byte before extending: {:?}", proofs);
+    // error!("Proofs byte before extending: {:?}", proofs);
     proofs.extend(new_proofs);
-    error!("Proofs byte after extending: {:?}", proofs);
+    // error!("Proofs byte after extending: {:?}", proofs);
 
     send_update_notification(new_proofs, sender);
     //verify_time_challenge_bound() should return three cases:
@@ -531,5 +542,21 @@ fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
         };
     } else {
         error!("In verifier the tag is NOT 1: the tag is {}", tag)
+    }
+}
+
+fn attempt_connection() -> Option<String> {
+    // Replace this with your actual connection logic
+    // For the sake of example, let's say the connection succeeds after 3 attempts
+    static mut ATTEMPT_COUNT: u32 = 0;
+
+    unsafe {
+        ATTEMPT_COUNT += 1;
+
+        if ATTEMPT_COUNT <= 3 {
+            None // Simulating a failed connection attempt
+        } else {
+            Some("Connected!".to_string()) // Simulating a successful connection attempt
+        }
     }
 }
