@@ -1,4 +1,3 @@
-
 use crate::Merkle_Tree::{node_generic::*, structs::*};
 use serde::Serialize;
 use talk::crypto::primitives::hash::{hash, Hash};

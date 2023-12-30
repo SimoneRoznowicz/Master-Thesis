@@ -6,23 +6,20 @@ mod communication;
 extern crate env_logger;
 extern crate log;
 
-
-
-use std::fs::{OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::thread;
 use std::time::Duration;
 // use first_rust_project::Direction;
 
-
 use rand::Rng;
 
 //use crate::communication::server::start_server;
-use crate::PoS::prover::Prover;
-use crate::PoS::verifier::Verifier;
 use crate::block_generation::blockgen::GROUP_SIZE;
 use crate::block_generation::encoder::generate_block_group;
 use crate::block_generation::utils::Utils::BATCH_SIZE;
+use crate::PoS::prover::Prover;
+use crate::PoS::verifier::Verifier;
 
 /*
 * Possible logger levels are: Error, Warn, Info, Debug, Trace
@@ -56,10 +53,7 @@ fn set_logger() {
 //     println!("{}",res);
 // }
 
-
-
 // block_id == 0 while position == 406227  225
-
 
 /*A block_group is made of a Vec<[u64,4]>: a Vector containing (2^16 = 65536 elements).
     So in total: there are 2^18 = 262144 u64 elements --> 2^21 = 2097152 u8 elements in a block_group
@@ -77,7 +71,7 @@ fn main() {
         let block_group = generate_block_group(0);
         let block: Vec<u64> = block_group[0].to_vec();
         let mut bufu8: Vec<u8> = Vec::new();
-    
+
         // for &bytesu64 in &block {
         //     let bytes: [u8; 8] = bytesu64.to_be_bytes();
         //     bufu8.extend_from_slice(&bytes);
@@ -89,9 +83,9 @@ fn main() {
         // print!("block_group == {:?}", block_group);
         //println!("block_group[0] == {:?}", block_group[0]);
         let mut metadata = file.metadata();
-        println!("length file = {}",metadata.unwrap().len());
+        println!("length file = {}", metadata.unwrap().len());
 
-        for i in 0..GROUP_SIZE {  
+        for i in 0..GROUP_SIZE {
             for j in 0..block_group.len() {
                 let byte_fragment = block_group[j][i].to_le_bytes();
                 file.write_all(&byte_fragment).unwrap();
@@ -107,7 +101,7 @@ fn main() {
         // }
 
         let metadataa = file.metadata();
-        println!("length file = {}",metadataa.unwrap().len());
+        println!("length file = {}", metadataa.unwrap().len());
 
         //file.write_all(&bufu8).unwrap();
 
@@ -150,7 +144,7 @@ fn main() {
         thread::spawn(move || {
             Prover::start(addres_prover_clone, addres_verifier_clone);
         });
-        //thread::sleep(Duration::from_secs(5));
+        thread::sleep(Duration::from_secs(5));
         Verifier::start(address_verifier, address_prover);
         thread::sleep(Duration::from_secs(100));
     }

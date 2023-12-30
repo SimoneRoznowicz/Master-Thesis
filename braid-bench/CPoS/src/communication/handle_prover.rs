@@ -1,13 +1,11 @@
+use log::{debug, error, info, trace, warn};
+use serde_json::error;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use serde_json::error;
-use log::{debug, error, info, trace, warn};
 
 use crate::block_generation::utils::Utils::{
-    NUM_BLOCK_GROUPS_PER_UNIT,
-    NUM_FRAGMENTS_PER_UNIT, NUM_BLOCKS_PER_UNIT, NUM_BYTES_IN_BLOCK,
+    NUM_BLOCKS_PER_UNIT, NUM_BLOCK_GROUPS_PER_UNIT, NUM_BYTES_IN_BLOCK, NUM_FRAGMENTS_PER_UNIT,
 };
-
 
 // pub fn handle_challenge(msg: &[u8], stream: &TcpStream, receiver: mpsc::Receiver<Signal>) {
 //     let mut counter = 0;
@@ -63,28 +61,30 @@ pub fn random_path_generator(seed: u8, iteration: u8) -> (u32, u32, u8) {
 
     seed.hash(&mut hasher_nxt_block);
     let new_id = hasher_nxt_block.finish() % NUM_BLOCKS_PER_UNIT as u64;
-    info!("PROVER: hasher_nxt_block.finish()  {}", hasher_nxt_block.finish());
+    info!(
+        "PROVER: hasher_nxt_block.finish()  {}",
+        hasher_nxt_block.finish()
+    );
 
     seed.hash(&mut hasher_nxt_pos);
     NUM_BYTES_IN_BLOCK.hash(&mut hasher_nxt_pos);
-    let new_p = hasher_nxt_pos.finish() % NUM_BYTES_IN_BLOCK as u64;      
+    let new_p = hasher_nxt_pos.finish() % NUM_BYTES_IN_BLOCK as u64;
 
     new_id.hash(&mut hasher_seed);
     new_p.hash(&mut hasher_seed);
     iteration.hash(&mut hasher_seed);
     let new_seed = hasher_seed.finish() % u8::MAX as u64;
 
-    error!("VERIFIER: new_id == {}",new_id);
-    error!("VERIFIER: new_p == {}",new_p);
-    error!("VERIFIER: iteration == {}",iteration);
-    error!("VERIFIER: new_seed inside == {}",new_seed);
-    return (new_id.try_into().unwrap(), new_p.try_into().unwrap(), new_seed.try_into().unwrap());
+    debug!("VERIFIER: new_id == {}", new_id);
+    debug!("VERIFIER: new_p == {}", new_p);
+    debug!("VERIFIER: iteration == {}", iteration);
+    info!("VERIFIER: new_seed inside == {}", new_seed);
+    return (
+        new_id.try_into().unwrap(),
+        new_p.try_into().unwrap(),
+        new_seed.try_into().unwrap(),
+    );
 }
-
-
-
-
-
 
 pub fn random_path_generator1(seed: u8, iteration: u8) -> (u32, u32, u8) {
     let mut hasher_nxt_block = DefaultHasher::new();
@@ -93,25 +93,32 @@ pub fn random_path_generator1(seed: u8, iteration: u8) -> (u32, u32, u8) {
 
     seed.hash(&mut hasher_nxt_block);
     let new_id = hasher_nxt_block.finish() % NUM_BLOCKS_PER_UNIT as u64;
-    info!("PROVER: hasher_nxt_block.finish()  {}", hasher_nxt_block.finish());
+    info!(
+        "PROVER: hasher_nxt_block.finish()  {}",
+        hasher_nxt_block.finish()
+    );
 
     seed.hash(&mut hasher_nxt_pos);
     NUM_BYTES_IN_BLOCK.hash(&mut hasher_nxt_pos);
-    let new_p = hasher_nxt_pos.finish() % NUM_BYTES_IN_BLOCK as u64;      
+    let new_p = hasher_nxt_pos.finish() % NUM_BYTES_IN_BLOCK as u64;
 
     new_id.hash(&mut hasher_seed);
     new_p.hash(&mut hasher_seed);
     iteration.hash(&mut hasher_seed);
     let new_seed = hasher_seed.finish() % u8::MAX as u64;
 
-    error!("PROVER: new_id == {}",new_id);
-    error!("PROVER: new_p == {}",new_p);
-    error!("PROVER: iteration == {}",iteration);
-    error!("PROVER: new_seed inside == {}",new_seed);
-    return (new_id.try_into().unwrap(), new_p.try_into().unwrap(), new_seed.try_into().unwrap());
+    debug!("PROVER: new_id == {}", new_id);
+    debug!("PROVER: new_p == {}", new_p);
+    debug!("PROVER: iteration == {}", iteration);
+    info!("PROVER: new_seed inside == {}", new_seed);
+    return (
+        new_id.try_into().unwrap(),
+        new_p.try_into().unwrap(),
+        new_seed.try_into().unwrap(),
+    );
 }
-    //P: 14 185 new_p=119881 new_id == 
-    
-// pub fn stop_sending_proofs(sender: mpsc::Sender<Signal>) { 
+//P: 14 185 new_p=119881 new_id ==
+
+// pub fn stop_sending_proofs(sender: mpsc::Sender<Signal>) {
 //     sender.send(Signal::Stop).unwrap();
 // }

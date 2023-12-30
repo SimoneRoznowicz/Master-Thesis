@@ -1,12 +1,16 @@
 use aes::cipher::Counter;
 use log::{debug, error, info, trace, warn};
-use rand::{Rng};
+use rand::Rng;
 use serde_json::error;
 use std::{
-    collections::{HashMap},
+    collections::HashMap,
     io::Read,
     net::{Shutdown, TcpStream},
-    sync::mpsc::{self, Receiver, Sender},
+    os::windows::io::AsSocket,
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        Arc, Mutex,
+    },
     thread::{self},
     time::Duration,
     vec,
@@ -15,11 +19,12 @@ use talk::crypto::primitives::hash::HASH_LENGTH;
 
 use crate::{
     block_generation::{
+        blockgen::GROUP_SIZE,
         encoder::generate_block_group,
         utils::Utils::{
-            BATCH_SIZE, VERIFIABLE_RATIO, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BYTES_PER_BLOCK_ID,
-            NUM_BYTES_PER_POSITION,
-        }, blockgen::GROUP_SIZE,
+            BATCH_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BYTES_PER_BLOCK_ID,
+            NUM_BYTES_PER_POSITION, VERIFIABLE_RATIO,
+        },
     },
     communication::{
         client::send_msg,
@@ -28,10 +33,7 @@ use crate::{
             Failure_Reason, Fairness, Notification, Time_Verification_Status, Verification_Status,
         },
     },
-    Merkle_Tree::{
-        client_verify::get_root_hash,
-        structs::{Id},
-    },
+    Merkle_Tree::{client_verify::get_root_hash, structs::Id},
 };
 
 use super::{structs::NotifyNode, utils::from_bytes_to_proof};
@@ -44,10 +46,10 @@ pub struct Verifier {
     proofs: Vec<u8>,
     is_fair: bool,
     is_terminated: bool,
-    mapping_bytes: HashMap<(u32, u32), (u8, bool)>, // k: (block_id,position) v: (byte_value, inclusion_proof_already_verified)
+    shared_mapping_bytes: Arc<Mutex<HashMap<(u32, u32), (u8, bool)>>>, // k: (block_id,position) v: (byte_value, inclusion_proof_already_verified)
     //hash_root: [u8; HASH_LENGTH],
     status: (Verification_Status, Fairness),
-    counter: u8,  //FAKE TO BE ROMVED
+    counter: u8, //FAKE TO BE ROMVED
 }
 
 impl Verifier {
@@ -72,22 +74,6 @@ impl Verifier {
         sender: Sender<NotifyNode>,
         seed: u8,
     ) -> Verifier {
-        //return Verifier {address, prover_address, seed}
-        // let mut stream: Option<TcpStream> = None;
-
-        // let stream_option = TcpStream::connect(prover_address.clone());
-        // match &stream_option {
-        //     Ok(stream) => {
-        //         info!(
-        //             "\nConnection from verifier at {} and Prover at {} successfully created ",
-        //             &stream.local_addr().unwrap(),
-        //             &stream.peer_addr().unwrap()
-        //         )
-        //     }
-        //     Err(e) => {
-        //         error!("Error in connection: {}", e)
-        //     }
-        // };
         let mut stream_option: Result<TcpStream, std::io::Error>;
         loop {
             stream_option = TcpStream::connect(prover_address.clone());
@@ -95,20 +81,22 @@ impl Verifier {
                 Ok(_) => {
                     info!("Connection Successful!");
                     break;
-                },
+                }
                 Err(e) => {
                     warn!("Connection was not possible. Retry in 2 seconds...");
                     thread::sleep(Duration::from_secs(2));
-                },
+                }
             }
         }
-    
+
         let stream = stream_option.unwrap();
         let proofs: Vec<u8> = Vec::new();
         let status = (Verification_Status::Executing, Fairness::Undecided);
         let is_fair = true;
         let is_terminated = false;
-        let seed_map: HashMap<(u32, u32), (u8, bool)> = HashMap::new();
+        let mapping_bytes: HashMap<(u32, u32), (u8, bool)> = HashMap::new();
+        let shared_mapping_bytes = Arc::new(Mutex::new(mapping_bytes));
+
         //let hash:[u8; HASH_LENGTH] = Default::default();
         let mut counter = 0;
         let mut this = Self {
@@ -119,8 +107,7 @@ impl Verifier {
             proofs,
             is_fair,
             is_terminated,
-            mapping_bytes: seed_map,
-            //hash_root: hash,
+            shared_mapping_bytes,
             status,
             counter,
         };
@@ -133,7 +120,7 @@ impl Verifier {
         thread::spawn(move || {
             loop {
                 let sender_clone = sender.clone();
-                let mut data = [0; 128]; // Use a smaller buffer size
+                let mut data = [0; 500]; // Use a smaller buffer size
                 handle_message(handle_stream(&mut stream_clone, &mut data), sender_clone);
             }
         });
@@ -184,11 +171,14 @@ impl Verifier {
                         Notification::Handle_Inclusion_Proof => {
                             info!("Handle_Inclusion_Proof started");
                             let sender_clone = sender.clone();
+                            let shared_map = Arc::clone(&self.shared_mapping_bytes);
+
                             thread::spawn(move || {
                                 handle_inclusion_proof(
                                     //&notify_node.buff[1 + HASH_LENGTH..],
                                     &notify_node.buff,
                                     &sender_clone,
+                                    shared_map,
                                 );
                             });
                         }
@@ -202,10 +192,12 @@ impl Verifier {
                                         self.is_terminated = true;
                                         self.is_fair = false;
                                         let terminate_vector = vec![2]; //Unfair(Time Reason)
-                                        sender.send(NotifyNode {
-                                            buff: terminate_vector,
-                                            notification: Notification::Terminate,
-                                        }).unwrap();
+                                        sender
+                                            .send(NotifyNode {
+                                                buff: terminate_vector,
+                                                notification: Notification::Terminate,
+                                            })
+                                            .unwrap();
                                     }
                                 }
                             }
@@ -271,14 +263,13 @@ impl Verifier {
             //dovrebbe essere una map con key u8 ovvero block_id e value u8 ovvero la position del byte nel block
         }
 
-
         let proofs_len = msg.len() as u32;
         let mut verfiable_ratio = VERIFIABLE_RATIO;
         if VERIFIABLE_RATIO == 0.0 {
             warn!("VERIFIABLE_RATIO was set to 0: it was reset to 0.5");
             verfiable_ratio = 0.5;
         }
-        let avg_step = (1.0/verfiable_ratio).floor() as i32;
+        let avg_step = (1.0 / verfiable_ratio).floor() as i32;
         let mut i: i32 = -avg_step;
         let mut random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
         // info!("Average Step == {} + random Step == {}", avg_step, random_step);
@@ -287,12 +278,24 @@ impl Verifier {
         i = (i + ((avg_step + random_step) as i32)).abs();
         random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
 
-        info!("i == {}, Average Step == {} + random Step == {}",i, avg_step, random_step);
+        info!(
+            "i == {}, Average Step == {} + random Step == {}",
+            i, avg_step, random_step
+        );
 
+        let mut k = 0;
         verified_blocks_and_positions.push(3); //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
         while i < msg.len() as i32 {
-            self.mapping_bytes.insert((block_id, position), (0, false));
-            warn!("V: Iteration: {}, block_id = {}, position = {}, value = {}", i, block_ids_pos[i as usize].0, block_ids_pos[i as usize].1, msg[i as usize]);
+            {
+                self.shared_mapping_bytes
+                    .lock()
+                    .unwrap()
+                    .insert((block_id, position), (0, false));
+            }
+            warn!(
+                "V: Iteration: {}, block_id = {}, position = {}, value = {}",
+                i, block_ids_pos[i as usize].0, block_ids_pos[i as usize].1, msg[i as usize]
+            );
             warn!("Indexxx == {}, msg before check == {:?}", i, msg);
 
             if !self.check_byte_value(
@@ -304,18 +307,31 @@ impl Verifier {
                 return false;
             }
             //send request Merkle Tree for each of the proof: send tag 3 followed by the indexes (block_ids), followed by the positions
-            let block_id = i.to_le_bytes();
+            //e.g. 3,block_id1,position1,blockid2,position2,block_id3,position3...
+            debug!(
+                "V: k=={} and block_id == {} and pos == {}",
+                k, block_ids_pos[i as usize].0, block_ids_pos[i as usize].1
+            );
+            let block_id = block_ids_pos[i as usize].0.to_le_bytes();
             let position = block_ids_pos[i as usize].1.to_le_bytes();
             verified_blocks_and_positions.extend(block_id);
             verified_blocks_and_positions.extend(position);
             i = i + ((avg_step + random_step) as i32);
-            info!("Average Step == {} + random Step == {}", avg_step, random_step);
+            // info!("Average Step == {} + random Step == {}", avg_step, random_step);
             random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
+            k += 1;
         }
         info!("Successful Correctness Verification");
+        error!(
+            "V: verified_blocks_and_positions == {:?}",
+            verified_blocks_and_positions
+        );
         send_msg(&self.stream, &verified_blocks_and_positions);
         return true;
     }
+    //[2023-12-18T13:54:24Z DEBUG CPoS::PoS::verifier] V: k==0 and block_id == 18 and pos == 282451
+    //[2023-12-18T13:54:25Z DEBUG CPoS::PoS::verifier] V: k==1 and block_id == 3 and pos == 271767
+    //[2023-12-18T13:54:31Z DEBUG CPoS::PoS::verifier] V: k==8 and block_id == 4 and pos == 471803
 
     //[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15]]
     //blockid 10
@@ -323,13 +339,14 @@ impl Verifier {
     //8 / 4  = 2
     //10 % 4 == 2
     fn check_byte_value(&mut self, block_id: u32, pos_in_block: u32, byte_received: u8) -> bool {
-        let block_group: Vec<[u64; GROUP_SIZE]> = generate_block_group((block_id / GROUP_SIZE as u32).try_into().unwrap());
+        let block_group: Vec<[u64; GROUP_SIZE]> =
+            generate_block_group((block_id / GROUP_SIZE as u32).try_into().unwrap());
         // warn!("generate_block_group with input == {}", block_id / GROUP_SIZE as u32);
         //block from [0 to 3] within the blockgroup
         //let block_num_in_group = pos_in_block % 4;
-        let selected_arr: [u64; GROUP_SIZE] = block_group[(pos_in_block/8) as usize]; //4 cells made of 8 bytes each
+        let selected_arr: [u64; GROUP_SIZE] = block_group[(pos_in_block / 8) as usize]; //4 cells made of 8 bytes each
 
-        let mut array_u8: [u8; 8*GROUP_SIZE] = [0;8*GROUP_SIZE];
+        let mut array_u8: [u8; 8 * GROUP_SIZE] = [0; 8 * GROUP_SIZE];
 
         for (i, &element) in selected_arr.iter().enumerate() {
             let bytes = element.to_le_bytes();
@@ -341,24 +358,28 @@ impl Verifier {
         // let byte_value_2 = array_u8[8 + (pos_in_block % 8) as usize];
         // let byte_value_3 = array_u8[16 + (pos_in_block % 8) as usize];
         // let byte_value_4 = array_u8[24 + (pos_in_block % 8) as usize];
-        let byte_value = array_u8[(block_id % GROUP_SIZE as u32) as usize*8 + (pos_in_block % 8) as usize];
-
-
+        let byte_value =
+            array_u8[(block_id % GROUP_SIZE as u32) as usize * 8 + (pos_in_block % 8) as usize];
 
         // let partblock = block_group[(block_id % 4) as usize];
         // SBAGLIATOOOOOOOO SERVE POSITION NELL INDICE DEL BLOCK SOPRA CREDO
         // let fragment = partblock[(pos_in_block/4) as usize];
         // let byte_value = fragment.to_le_bytes()[(pos_in_block % 4) as usize];
-        
+
         //warn!("byte_arr_32 == {:?}",selected_arr);
         //warn!("byte_arr == {:?}",array_u8);
         //warn!("byte_val == {}, byte_val2 == {}, byte_val3 == {}, byte_val4 == {}", byte_value, byte_value_2, byte_value_3, byte_value_4);
 
-        warn!("byte_value_real == {} and byte_received == {}",byte_value,byte_received);
-
-        self.mapping_bytes
-        .insert((block_id, pos_in_block), (byte_value, false));
-
+        warn!(
+            "byte_value_real == {} and byte_received == {}",
+            byte_value, byte_received
+        );
+        {
+            self.shared_mapping_bytes
+                .lock()
+                .unwrap()
+                .insert((block_id, pos_in_block), (byte_value, false));
+        }
         return byte_value == byte_received;
     }
 }
@@ -385,7 +406,7 @@ fn handle_verification(
     new_proofs: &[u8],
     proofs: &mut Vec<u8>,
     sender: &Sender<NotifyNode>,
-    counter: u8,  //FAKE TO REMOVE AFTER TIME CHECK IMPLEMENTATION
+    counter: u8, //FAKE TO REMOVE AFTER TIME CHECK IMPLEMENTATION
 ) {
     //note that new_proofs e proofs hanno gia rimosso il primo byte del tag
     //Update vector of proofs
@@ -437,35 +458,46 @@ fn handle_verification(
         }
         Time_Verification_Status::Insufficient_Proofs => {
             warn!("--> Time_Verification_Status::Insufficient_Proofs");
-    /*Do nothing*/ }
+            /*Do nothing*/
+        }
     }
 }
 
-fn handle_inclusion_proof(msg: &[u8], sender: &Sender<NotifyNode>) {
-    //SO THE MESSAGE WILL BE EVENTALLY: TAG,HASH,block_id,byte_position,byte_value,proof
-    let proof = from_bytes_to_proof(msg.to_vec());
-
+fn handle_inclusion_proof(
+    msg: &[u8],
+    sender: &Sender<NotifyNode>,
+    shared_map: Arc<Mutex<HashMap<(u32, u32), (u8, bool)>>>,
+) {
+    //SO THE MESSAGE WILL BE EVENTALLY: HASH,block_id,byte_position,proof
+    debug!("V: Inside handle_inclusion_proof func msg == {:?}", msg);
     let mut root_hash_bytes: [u8; HASH_BYTES_LEN] = Default::default();
-    root_hash_bytes.copy_from_slice(&msg[1..1 + HASH_BYTES_LEN]);
+    root_hash_bytes.copy_from_slice(&msg[..HASH_BYTES_LEN]);
 
     let mut block_id_in_bytes: [u8; NUM_BYTES_PER_BLOCK_ID] = [0; NUM_BYTES_PER_BLOCK_ID];
     block_id_in_bytes
-        .copy_from_slice(&msg[1 + HASH_BYTES_LEN..1 + HASH_BYTES_LEN + NUM_BYTES_PER_BLOCK_ID]);
+        .copy_from_slice(&msg[HASH_BYTES_LEN..HASH_BYTES_LEN + NUM_BYTES_PER_BLOCK_ID]);
     let block_id = u32::from_le_bytes(block_id_in_bytes);
 
-    let mut position_in_byte: [u8; NUM_BYTES_PER_POSITION] = [0; NUM_BYTES_PER_POSITION];
-    position_in_byte.copy_from_slice(
-        &msg[1 + 32 + NUM_BYTES_PER_BLOCK_ID
-            ..1 + 32 + NUM_BYTES_PER_BLOCK_ID + NUM_BYTES_PER_POSITION],
+    let mut position_in_bytes: [u8; NUM_BYTES_PER_POSITION] = [0; NUM_BYTES_PER_POSITION];
+    position_in_bytes.copy_from_slice(
+        &msg[HASH_BYTES_LEN + NUM_BYTES_PER_BLOCK_ID
+            ..HASH_BYTES_LEN + NUM_BYTES_PER_BLOCK_ID + NUM_BYTES_PER_POSITION],
     );
-    let position = u32::from_le_bytes(position_in_byte);
+    let position = u32::from_le_bytes(position_in_bytes);
+    let proof = from_bytes_to_proof(
+        msg[HASH_BYTES_LEN + NUM_BYTES_PER_BLOCK_ID + NUM_BYTES_PER_POSITION..].to_vec(),
+    );
 
-    let byte_value: u8 = msg[1 + 32 + NUM_BYTES_PER_BLOCK_ID + NUM_BYTES_PER_POSITION];
+    debug!("V handle_inclusion_proof: len(root_hash_bytes) == {}, block_id == {}, position_in_byte == {}", root_hash_bytes.len(), block_id, position);
 
+    let mut leaf_val = 0;
+    {
+        leaf_val = shared_map.lock().unwrap()[&(block_id, position)].0;
+    }
+    let leaf_key = Id::<(u32, u32)>::new((block_id, position));
     let root_hash_computed = get_root_hash::<u8, (u32, u32)>(
-        proof,
-        byte_value,
-        Id::<(u32, u32)>::new((block_id, position)),
+        //Merkle Tree: k:byte value v: hash(block_id,pos_in_block)
+        proof, leaf_val, leaf_key,
     );
     let mut correctness_flag = 1; //Default: false
     if root_hash_computed.to_bytes() == root_hash_bytes {
@@ -533,9 +565,7 @@ fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
             buff: msg[1..].to_vec(),
             notification: Notification::Handle_Inclusion_Proof,
         }) {
-            Ok(_) => {
-                debug!("good send to main")
-            }
+            Ok(_) => {}
             Err(e) => {
                 debug!("error first send channel == {}", e)
             }

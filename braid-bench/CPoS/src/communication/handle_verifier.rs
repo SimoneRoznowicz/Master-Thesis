@@ -2,10 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::net::TcpStream;
 
-
 use rand::seq::SliceRandom;
-
-
 
 use crate::block_generation::utils::Utils::{
     BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,

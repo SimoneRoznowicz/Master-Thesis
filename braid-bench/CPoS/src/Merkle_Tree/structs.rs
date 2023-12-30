@@ -104,3 +104,46 @@ impl Proof {
         &self.siblings
     }
 }
+
+#[derive(Debug)]
+pub struct Sibling_Mod {
+    hash: blake3::Hash,
+    direction: Direction,
+}
+
+impl Sibling_Mod {
+    /// Returns a new Sibling.
+    pub fn new(h: blake3::Hash, d: Direction) -> Sibling_Mod {
+        Sibling_Mod {
+            hash: h,
+            direction: d,
+        }
+    }
+
+    /// Returns the direction associated with the Sibling invoking the method.
+    pub fn get_direction(&self) -> &Direction {
+        &self.direction
+    }
+
+    /// Returns the Hash associated with the Sibling invoking the method.
+    pub fn get_hash(&self) -> &blake3::Hash {
+        &self.hash
+    }
+}
+
+#[derive(Debug)]
+pub struct Proof_Mod {
+    siblings: Vec<Sibling_Mod>,
+}
+
+impl Proof_Mod {
+    /// Returns a new Proof.
+    pub fn new(s: Vec<Sibling_Mod>) -> Proof_Mod {
+        Proof_Mod { siblings: s }
+    }
+
+    /// Returns a reference to the vector of Siblings associated with the Proof invoking the method.
+    pub fn get_siblings(&self) -> &Vec<Sibling_Mod> {
+        &self.siblings
+    }
+}
