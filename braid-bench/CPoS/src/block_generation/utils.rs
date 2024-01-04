@@ -20,6 +20,8 @@ pub mod Utils {
     pub const NUM_BYTES_PER_BLOCK_ID: usize = 4;
     pub const NUM_BYTES_PER_POSITION: usize = 4;
     pub const HASH_BYTES_LEN: usize = 32;
+    pub const FRAGMENT_SIZE: usize = 32;
+
 
     pub const BATCH_SIZE: usize = 10; //Indicates the batch size of proofs that should be sent to the verifier at every
                                       // Lowest accepted percentage of blocks not stored by the prover. If the verifier detects that the prover

@@ -120,6 +120,19 @@ fn main() {
         println!("{:?}", num_u64.to_ne_bytes());
         let num_u8 = num_u64.to_le_bytes();
         println!("converted == {}", u64::from_le_bytes(num_u8));
+
+        println!("***********************************");
+        let mut vec = Vec::new();
+        vec.push(1);
+        vec.push(2);
+        vec.push(3);
+
+        let arr = [1,2,3];
+
+        let harr = blake3::hash(&arr);
+        let hvec = blake3::hash(&vec);
+        println!("arr == {:?},\nvec == {:?}", harr,hvec);
+
     } else {
         set_logger();
         //challenge: send 1(tag) + 1(seed)

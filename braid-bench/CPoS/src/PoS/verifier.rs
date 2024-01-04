@@ -23,7 +23,7 @@ use crate::{
         encoder::generate_block_group,
         utils::Utils::{
             BATCH_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BYTES_PER_BLOCK_ID,
-            NUM_BYTES_PER_POSITION, VERIFIABLE_RATIO,
+            NUM_BYTES_PER_POSITION, VERIFIABLE_RATIO, FRAGMENT_SIZE,
         },
     },
     communication::{
@@ -33,7 +33,7 @@ use crate::{
             Failure_Reason, Fairness, Notification, Time_Verification_Status, Verification_Status,
         },
     },
-    Merkle_Tree::{client_verify::get_root_hash, structs::Id},
+    Merkle_Tree::{client_verify::{get_root_hash, get_root_hash_mod}, structs::Id},
 };
 
 use super::{structs::NotifyNode, utils::from_bytes_to_proof};
@@ -120,7 +120,7 @@ impl Verifier {
         thread::spawn(move || {
             loop {
                 let sender_clone = sender.clone();
-                let mut data = [0; 500]; // Use a smaller buffer size
+                let mut data = [0; 1000]; // Use a smaller buffer size
                 handle_message(handle_stream(&mut stream_clone, &mut data), sender_clone);
             }
         });
@@ -468,39 +468,58 @@ fn handle_inclusion_proof(
     sender: &Sender<NotifyNode>,
     shared_map: Arc<Mutex<HashMap<(u32, u32), (u8, bool)>>>,
 ) {
-    //SO THE MESSAGE WILL BE EVENTALLY: HASH,block_id,byte_position,proof
+    let mut curr_indx = 0;
+    //SO THE MESSAGE WILL BE EVENTALLY: HASH,block_id,byte_position,self_fragment,proof
     debug!("V: Inside handle_inclusion_proof func msg == {:?}", msg);
     let mut root_hash_bytes: [u8; HASH_BYTES_LEN] = Default::default();
     root_hash_bytes.copy_from_slice(&msg[..HASH_BYTES_LEN]);
+    curr_indx += HASH_BYTES_LEN;
+    debug!("V: curr_indx 0== {:?}", curr_indx);
 
     let mut block_id_in_bytes: [u8; NUM_BYTES_PER_BLOCK_ID] = [0; NUM_BYTES_PER_BLOCK_ID];
     block_id_in_bytes
-        .copy_from_slice(&msg[HASH_BYTES_LEN..HASH_BYTES_LEN + NUM_BYTES_PER_BLOCK_ID]);
+        .copy_from_slice(&msg[curr_indx..curr_indx + NUM_BYTES_PER_BLOCK_ID]);
     let block_id = u32::from_le_bytes(block_id_in_bytes);
+    curr_indx += NUM_BYTES_PER_BLOCK_ID;
+    debug!("V: curr_indx 1== {:?}", curr_indx);
 
     let mut position_in_bytes: [u8; NUM_BYTES_PER_POSITION] = [0; NUM_BYTES_PER_POSITION];
     position_in_bytes.copy_from_slice(
-        &msg[HASH_BYTES_LEN + NUM_BYTES_PER_BLOCK_ID
-            ..HASH_BYTES_LEN + NUM_BYTES_PER_BLOCK_ID + NUM_BYTES_PER_POSITION],
+        &msg[curr_indx..curr_indx + NUM_BYTES_PER_POSITION],
     );
     let position = u32::from_le_bytes(position_in_bytes);
-    let proof = from_bytes_to_proof(
-        msg[HASH_BYTES_LEN + NUM_BYTES_PER_BLOCK_ID + NUM_BYTES_PER_POSITION..].to_vec(),
+    curr_indx += NUM_BYTES_PER_POSITION;
+    debug!("V: curr_indx 2== {:?}", curr_indx);
+
+    let mut self_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
+    self_fragment.copy_from_slice(
+        &msg[curr_indx..curr_indx+FRAGMENT_SIZE],
     );
+    curr_indx += FRAGMENT_SIZE;
+    debug!("V: curr_indx 3== {:?}", curr_indx);
+
+    let proof = from_bytes_to_proof(
+        msg[curr_indx..].to_vec(),
+    );
+    debug!("V: curr_indx 4== {:?}", msg.len());
+    //After retrieving the elements: insert the byte to be proved in the self_fragment at the correct index. Then, using something similar to the method get_root_hash retrieve the hash of the root
 
     debug!("V handle_inclusion_proof: len(root_hash_bytes) == {}, block_id == {}, position_in_byte == {}", root_hash_bytes.len(), block_id, position);
 
-    let mut leaf_val = 0;
+    let mut byte_val = 0;
     {
-        leaf_val = shared_map.lock().unwrap()[&(block_id, position)].0;
+        byte_val = shared_map.lock().unwrap()[&(block_id, position)].0;
     }
-    let leaf_key = Id::<(u32, u32)>::new((block_id, position));
-    let root_hash_computed = get_root_hash::<u8, (u32, u32)>(
-        //Merkle Tree: k:byte value v: hash(block_id,pos_in_block)
-        proof, leaf_val, leaf_key,
+    debug!("byte_val == {}", byte_val);
+    // let leaf_key = Id::<(u32, u32)>::new((block_id, position));
+    let root_hash_computed = get_root_hash_mod(
+        &proof, (block_id,position), byte_val, self_fragment,
     );
-    let mut correctness_flag = 1; //Default: false
-    if root_hash_computed.to_bytes() == root_hash_bytes {
+    let mut correctness_flag = 1;
+    debug!("root_hash_computed.as_bytes() == {:?}",root_hash_computed.as_bytes());
+    debug!("root_hash_bytes == {:?}",root_hash_bytes);
+
+    if root_hash_computed.as_bytes() == &root_hash_bytes {
         //convert to byte array the hash_retrieved. Then compare.
         correctness_flag = 0;
     }
@@ -508,7 +527,7 @@ fn handle_inclusion_proof(
     update_new_proofs.push(1);
     update_new_proofs.push(correctness_flag);
 
-    //HOE TO CHECK THAT ALL INCLUSION PROOFS WERE RECEIVED
+    //HOW TO CHECK THAT ALL INCLUSION PROOFS WERE RECEIVED: you can simply remove the entry from the map when you receive the corresponding inclusion proof
     sender
         .send(NotifyNode {
             buff: update_new_proofs,
@@ -572,21 +591,5 @@ fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
         };
     } else {
         error!("In verifier the tag is NOT 1: the tag is {}", tag)
-    }
-}
-
-fn attempt_connection() -> Option<String> {
-    // Replace this with your actual connection logic
-    // For the sake of example, let's say the connection succeeds after 3 attempts
-    static mut ATTEMPT_COUNT: u32 = 0;
-
-    unsafe {
-        ATTEMPT_COUNT += 1;
-
-        if ATTEMPT_COUNT <= 3 {
-            None // Simulating a failed connection attempt
-        } else {
-            Some("Connected!".to_string()) // Simulating a successful connection attempt
-        }
     }
 }
