@@ -33,14 +33,14 @@ pub fn get_root_hash_mod(proof: &Proof_Mod, key: (u32, u32), value: u8, mut self
     //self_fragment[indx_byte_in_self_fragment as usize] = value;
     info!("Verifier: self_fragment == {:?}", self_fragment);
     let mut hash_final = blake3::hash(&self_fragment);
-    debug!("HASH FINAL before == {:?}",hash_final.as_bytes());
+    debug!("HASH self fragment == {:?}",hash_final.as_bytes());
 
     for sibling in siblings {
         // let mut sibling_hash = sibling.get_hash().as_bytes();
         // let mut curr_hash;
         // curr_hash = hash_final.as_bytes();
-        debug!("HASH FINAL == {:?}",hash_final.as_bytes());
-        debug!("Sibling.get_hash() == {:?}", sibling.get_hash().as_bytes());
+        // debug!("HASH FINAL == {:?}",hash_final.as_bytes());
+        // debug!("Sibling.get_hash() == {:?}", sibling.get_hash().as_bytes());
         match sibling.get_direction() {
             Direction::Left => {
                 let mut hasher = blake3::Hasher::new();

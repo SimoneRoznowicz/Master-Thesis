@@ -299,7 +299,7 @@ pub fn generate_proof_array(
     let mut root_hash: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
 
     let mut number_id_fragment = position / HASH_BYTES_LEN as u32;
-    let mut fragment_start_indx = (1+number_id_fragment) as usize*HASH_BYTES_LEN;//layer_len % HASH_BYTES_LEN;
+    let mut fragment_start_indx = (number_id_fragment) as usize*HASH_BYTES_LEN;//layer_len % HASH_BYTES_LEN;
     debug!("fragment_start_indx is {}", fragment_start_indx);
 
     let mut file2 = OpenOptions::new()
@@ -318,22 +318,26 @@ pub fn generate_proof_array(
         let mut second_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
         second_fragment.copy_from_slice(&hash_layers[i + HASH_BYTES_LEN..i + HASH_BYTES_LEN * 2]);
 
-        if counter < buffer.len()/HASH_BYTES_LEN {
+        //QUA i DEVE ESSERE MINORE DI BUFFER.LEN/hash.....
+        //o aspetta forse dovrebbe essere solo cosi'
+        //if counter < buffer.len()/(HASH_BYTES_LEN*2) {
+        //if counter < buffer.len()/HASH_BYTES_LEN {
+        if i<buffer.len() {
             first_fragment = *blake3::hash(&first_fragment).as_bytes();
             second_fragment = *blake3::hash(&second_fragment).as_bytes();
-            counter += 1;
-            let mut ccstr = "* ".to_string();
+            //counter += 1;
+            //let mut ccstr = "*".to_string();
             for b in &first_fragment{
-                let mut ccstr = b.to_string() + ", ";
+                let mut ccstr: String = b.to_string() + ", ";
                 file2.write(ccstr.as_bytes());
             }
-            file2.write("*".to_string().as_bytes());
+            file2.write("*\n".to_string().as_bytes());
 
             for b in &second_fragment{
                 let mut ccstr = b.to_string() + ", ";
                 file2.write(ccstr.as_bytes());
             }
-            file2.write("*".to_string().as_bytes());
+            file2.write("*\n".to_string().as_bytes());
         }
         let mut hasher = blake3::Hasher::new();
         hasher.update(&first_fragment);
@@ -347,54 +351,60 @@ pub fn generate_proof_array(
         }
         hash_layers.extend(new_hash.as_bytes());
 
-        i += HASH_BYTES_LEN * 2;
+        i = i + HASH_BYTES_LEN * 2;
     }
-    
+    file2.write("\nFINE".to_string().as_bytes());
+
     root_hash.copy_from_slice(&hash_layers[hash_layers.len()-HASH_BYTES_LEN..]);
 
     let mut counter = 0;
     let mut flag = false;
+    let mut lay_len = buffer.len();
+    debug!("Hash_layers == {:?}", hash_layers.len());
         for b in &hash_layers {
             let mut ccstr = b.to_string() + ", ";
             if counter%HASH_BYTES_LEN==0{
-                ccstr += "*";
+                ccstr = String::from("*\n") + &ccstr;
             }
-            if counter==buffer.len(){
-                ccstr += "\nINIZIO\n";
+            if counter==lay_len{
+                ccstr = ccstr + "\n--> " + &lay_len.to_string() + "\n";
                 flag = true;
             }
-            if counter%buffer.len()==0{
-                ccstr += "+";
-                flag = true;
-            }
-            if flag{
+            // if counter%buffer.len()==0{
+            //     ccstr = String::from("+") + &ccstr;
+            // }
+            if flag == true{
                 file2.write(ccstr.as_bytes());
-                counter+=1;
             }
+            if counter == lay_len{
+                counter = 0;
+                lay_len = lay_len/2;
+            }
+            counter+=1;
         }
     debug!("root_hash == {:?}", root_hash);
     let mut i = 0;
     let mut layer_len = buffer.len();
     let mut siblings = Vec::new();
-    let fragment_num_in_layer = layer_len / HASH_BYTES_LEN;
-    let mut layer_counter = 0;
+    //let fragment_num_in_layer = layer_len / HASH_BYTES_LEN;
+    let mut layer_counter = buffer.len();
     let mut self_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
     let mut is_first_iter = true;
+    debug!("position == {}", position);
 
     // let mut fragment_index = position % HASH_BYTES_LEN as u32;   not needed
     let mut count_frag = layer_len/HASH_BYTES_LEN;
-    while (layer_len > HASH_BYTES_LEN) {
-        debug!("position == {}", position);
+    //while (layer_len > HASH_BYTES_LEN) {
+    while (layer_len/HASH_BYTES_LEN > 1) {  //last layer before root
         debug!("layer_len == {}", layer_len);
         debug!("layer_counter == {}", layer_counter);
         debug!("number fragment == {} over {} fragments", number_id_fragment, layer_len/HASH_BYTES_LEN);
         debug!("count_frag == {}", count_frag);
         debug!("fragment_indx start == {}", fragment_start_indx);
-
         let mut sibling_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
 
         let mut direction_sibling;
-        if (number_id_fragment % 2 != 0) {
+        if (number_id_fragment % 2 == 0) {
             direction_sibling = Direction::Right;
             sibling_fragment.copy_from_slice(
                 &hash_layers[fragment_start_indx + HASH_BYTES_LEN..fragment_start_indx + HASH_BYTES_LEN * 2],
@@ -416,15 +426,31 @@ pub fn generate_proof_array(
                 .copy_from_slice(&hash_layers[fragment_start_indx..fragment_start_indx + HASH_BYTES_LEN]);
         }
         layer_len = layer_len / 2;
-        layer_counter += layer_len;
+        // layer_counter += layer_len;
         number_id_fragment = number_id_fragment/2;
         // fragment_indx = layer_counter + layer_len % HASH_BYTES_LEN;   Sbagliato credo
-        fragment_start_indx = layer_counter + number_id_fragment as usize*HASH_BYTES_LEN;
+        fragment_start_indx = layer_counter + (number_id_fragment as usize)*HASH_BYTES_LEN;
+        layer_counter += layer_len;
+
         count_frag += layer_len/HASH_BYTES_LEN;
     }
     let self_fragment_hash = blake3::hash(&self_fragment);
     debug!("Self_fragment xxx == {:?}\nSelf_fragment hash == {:?}",self_fragment,self_fragment_hash);
     return (Proof_Mod::new(siblings), self_fragment, root_hash);
+
+//initialization: layer_len==500k, layer_counter==500k,
+//      number_id_fragment==position / HASH_BYTES_LEN, 
+//      fragment_start_indx==number_id_fragment*HASH_BYTES_LEN
+
+//iter1(end of first iter): layer_len==250k, layer_counter==750k,
+//      number_id_fragment==, 
+//      fragment_start_indx==
+
+
+//iter2: layer_len==, layer_counter==,
+//      number_id_fragment==, 
+//      fragment_start_indx==
+
 
     //        A               
     //    A       a     is index % 2 == 0 --> No then take sibling on the R
@@ -432,6 +458,7 @@ pub fn generate_proof_array(
     // a a A a a a a a  is index % 2 == 0 --> Yes then take sibling on the R
     //                  Next level position di A is index = index / 2
     //                  At every new level, • Identify the reference position of A: the sibling is either on the left or on the right of A
+    // a a A a a a a a  a A a a  A a  A
 }
 
 
