@@ -13,17 +13,15 @@ use rand::seq::index;
 use serde_json::error;
 // use first_rust_project::src;
 
-use crate::Merkle_Tree::client_verify::get_root_hash_mod;
 use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE, SIZE};
 use crate::block_generation::encoder::generate_block_group;
 use crate::block_generation::utils::Utils::{
     BATCH_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,
-    NUM_BYTES_IN_BLOCK, NUM_BYTES_IN_BLOCK_GROUP, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION,
+    NUM_BYTES_IN_BLOCK, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION,
 };
 use crate::communication::client::send_msg;
 use crate::communication::handle_prover::random_path_generator1;
 use crate::communication::structs::Notification;
-use crate::Merkle_Tree::mpt::MerkleTree;
 use crate::Merkle_Tree::structs::{Direction, Proof_Mod, Sibling, Sibling_Mod};
 
 use super::structs::NotifyNode;
@@ -125,10 +123,8 @@ impl Prover {
 
         thread::spawn(move || {
             loop {
-                //secondo me in qualche modo non rilascia qua
                 let sender_clone = sender.clone();
                 let mut stream_clone = stream.try_clone().unwrap();
-                // //info!("New connection: {}", stream.peer_addr().unwrap());
                 let mut data = [0; 500]; // Use a smaller buffer size
                 let retrieved_data = handle_stream(&mut stream_clone, &mut data);
                 handle_message(retrieved_data, sender_clone);
@@ -139,7 +135,6 @@ impl Prover {
     pub fn main_handler(&mut self, receiver: &Receiver<NotifyNode>) {
         let counter = 0;
         let mut is_started = false;
-        // while counter < MAX_NUM_PROOFS {
         loop {
             match receiver.try_recv() {
                 Ok(notify_node) => match notify_node.notification {
@@ -187,7 +182,6 @@ impl Prover {
                     break;
                 }
             }
-            //counter += BATCH_SIZE*10;
         }
         info!("ARRIVED AT END OF LOOP");
     }
@@ -232,18 +226,12 @@ impl Prover {
 
             let (proof_mod, self_fragment, root_hash) =
                 generate_proof_array(&mut self.shared_file, block_ids[indx], positions[indx]);
-            debug!("Self_fragment xxx outsite == {:?}",self_fragment);
-            let hash_root_retrieved = get_root_hash_mod(&proof_mod, (0,0), 0, self_fragment);
-            debug!("Prover: root_hash generated == {:?} \nhash_root_retrieved == {:?}",root_hash,hash_root_retrieved.as_bytes());
-
-            //PROVA QUA A REGENERARE HASH DA QUESTA PROOF
-            //let mut merkle_tree = self.generate_merkle_tree(block_ids[indx]);
-            //let proof = merkle_tree.prove((block_ids[indx],positions[indx]));
-            //info!("Created Merkle Tree and proof == {:?}",proof);
+            // let hash_root_retrieved = get_root_hash_mod(&proof_mod, (0,0), 0, self_fragment);
+            // debug!("Prover: root_hash generated == {:?} \nhash_root_retrieved == {:?}",root_hash,hash_root_retrieved.as_bytes());
 
             let mut bytes_proof = Vec::new();
             from_proof_to_bytes(proof_mod, &mut bytes_proof); //cambia poi la funzione cosi ricevi come input &proof
-                                                                  // let hash = merkle_tree.compute_hashes();
+                                                              // let hash = merkle_tree.compute_hashes();
 
             let mut msg = vec![4]; // tag == 4 -> Handle Inclusion Proof
             msg.extend_from_slice(&root_hash); //HASH
@@ -252,37 +240,15 @@ impl Prover {
             msg.extend_from_slice(&self_fragment); //self_fragment
             msg.extend_from_slice(&bytes_proof); //proof
 
-            //debug!("msg len == {:?}", msg.len());
-            //debug!("msg 'creating inc proof' == {:?}", msg);
-            debug!("bytes_proof len == {:?} and bytes_proof == {:?}", bytes_proof.len(), bytes_proof);
+            debug!(
+                "bytes_proof len == {:?} and bytes_proof == {:?}",
+                bytes_proof.len(),
+                bytes_proof
+            );
 
             send_msg(&self.stream_opt.as_ref().unwrap(), &msg);
-            break; //TO REMOVE LATER
+            break;
         }
-    }
-
-    //Merkle Tree generated based on the block_id. The proof is based on the position of the byte in the block
-    pub fn generate_merkle_tree(&mut self, block_id: u32) -> MerkleTree<(u32, u32), u8> {
-        let mut merkle_tree = MerkleTree::<(u32, u32), u8>::new();
-
-        //0) Prova subiito a leggere tutti i byte da dall0inizio alla fine del blocco. Sono uno dietro laltro...
-        //1) creare MTs in parallelo!! (guardare come fare ad accedere a file in lettura contemporaneamente)
-        //2)
-        let mut buffer = [0; NUM_BYTES_IN_BLOCK as usize];
-        info!("Just before read_buffer_from_file");
-        read_block_from_file(&self.shared_file, block_id, &mut buffer);
-        info!(
-            "Buffer[1000] == {:?} and length == {}",
-            buffer[1000],
-            buffer.len()
-        );
-        for i in 0..NUM_BYTES_IN_BLOCK {
-            merkle_tree.insert((block_id, i), buffer[i as usize]); //Given a block: Key -> position (offset) of the byte in the block; Value -> value of the considered byte
-            if i % 1000 == 0 {
-                info!("i == {}", i);
-            }
-        }
-        return merkle_tree;
     }
 }
 
@@ -299,7 +265,7 @@ pub fn generate_proof_array(
     let mut root_hash: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
 
     let mut number_id_fragment = position / HASH_BYTES_LEN as u32;
-    let mut fragment_start_indx = (number_id_fragment) as usize*HASH_BYTES_LEN;//layer_len % HASH_BYTES_LEN;
+    let mut fragment_start_indx = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
     debug!("fragment_start_indx is {}", fragment_start_indx);
 
     let mut file2 = OpenOptions::new()
@@ -318,22 +284,17 @@ pub fn generate_proof_array(
         let mut second_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
         second_fragment.copy_from_slice(&hash_layers[i + HASH_BYTES_LEN..i + HASH_BYTES_LEN * 2]);
 
-        //QUA i DEVE ESSERE MINORE DI BUFFER.LEN/hash.....
-        //o aspetta forse dovrebbe essere solo cosi'
-        //if counter < buffer.len()/(HASH_BYTES_LEN*2) {
-        //if counter < buffer.len()/HASH_BYTES_LEN {
-        if i<buffer.len() {
+        if i < buffer.len() {
             first_fragment = *blake3::hash(&first_fragment).as_bytes();
             second_fragment = *blake3::hash(&second_fragment).as_bytes();
-            //counter += 1;
-            //let mut ccstr = "*".to_string();
-            for b in &first_fragment{
+
+            for b in &first_fragment {
                 let mut ccstr: String = b.to_string() + ", ";
                 file2.write(ccstr.as_bytes());
             }
             file2.write("*\n".to_string().as_bytes());
 
-            for b in &second_fragment{
+            for b in &second_fragment {
                 let mut ccstr = b.to_string() + ", ";
                 file2.write(ccstr.as_bytes());
             }
@@ -344,10 +305,20 @@ pub fn generate_proof_array(
         hasher.update(&second_fragment);
         let new_hash = hasher.finalize();
         if i == fragment_start_indx as usize {
-            debug!("Real first_fragment == {:?}\nReal second_fragment == {:?}\nNew_hash == {:?}",first_fragment,second_fragment,new_hash.as_bytes());
+            debug!(
+                "Real first_fragment == {:?}\nReal second_fragment == {:?}\nNew_hash == {:?}",
+                first_fragment,
+                second_fragment,
+                new_hash.as_bytes()
+            );
         }
-        if i == fragment_start_indx as usize-HASH_BYTES_LEN {
-            debug!("*Real first_fragment == {:?}\nReal second_fragment == {:?}\nNew_hash == {:?}",first_fragment,second_fragment,new_hash.as_bytes());
+        if i == fragment_start_indx as usize - HASH_BYTES_LEN {
+            debug!(
+                "*Real first_fragment == {:?}\nReal second_fragment == {:?}\nNew_hash == {:?}",
+                first_fragment,
+                second_fragment,
+                new_hash.as_bytes()
+            );
         }
         hash_layers.extend(new_hash.as_bytes());
 
@@ -355,145 +326,112 @@ pub fn generate_proof_array(
     }
     file2.write("\nFINE".to_string().as_bytes());
 
-    root_hash.copy_from_slice(&hash_layers[hash_layers.len()-HASH_BYTES_LEN..]);
+    root_hash.copy_from_slice(&hash_layers[hash_layers.len() - HASH_BYTES_LEN..]);
 
     let mut counter = 0;
     let mut flag = false;
     let mut lay_len = buffer.len();
     debug!("Hash_layers == {:?}", hash_layers.len());
-        for b in &hash_layers {
-            let mut ccstr = b.to_string() + ", ";
-            if counter%HASH_BYTES_LEN==0{
-                ccstr = String::from("*\n") + &ccstr;
-            }
-            if counter==lay_len{
-                ccstr = ccstr + "\n--> " + &lay_len.to_string() + "\n";
-                flag = true;
-            }
-            // if counter%buffer.len()==0{
-            //     ccstr = String::from("+") + &ccstr;
-            // }
-            if flag == true{
-                file2.write(ccstr.as_bytes());
-            }
-            if counter == lay_len{
-                counter = 0;
-                lay_len = lay_len/2;
-            }
-            counter+=1;
+    for b in &hash_layers {
+        let mut ccstr = b.to_string() + ", ";
+        if counter % HASH_BYTES_LEN == 0 {
+            ccstr = String::from("*\n") + &ccstr;
         }
+        if counter == lay_len {
+            ccstr = ccstr + "\n--> " + &lay_len.to_string() + "\n";
+            flag = true;
+        }
+
+        if flag == true {
+            file2.write(ccstr.as_bytes());
+        }
+        if counter == lay_len {
+            counter = 0;
+            lay_len = lay_len / 2;
+        }
+        counter += 1;
+    }
     debug!("root_hash == {:?}", root_hash);
     let mut i = 0;
     let mut layer_len = buffer.len();
     let mut siblings = Vec::new();
-    //let fragment_num_in_layer = layer_len / HASH_BYTES_LEN;
+
     let mut layer_counter = buffer.len();
     let mut self_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
     let mut is_first_iter = true;
     debug!("position == {}", position);
 
-    // let mut fragment_index = position % HASH_BYTES_LEN as u32;   not needed
-    let mut count_frag = layer_len/HASH_BYTES_LEN;
-    //while (layer_len > HASH_BYTES_LEN) {
-    while (layer_len/HASH_BYTES_LEN > 1) {  //last layer before root
+    let mut count_frag = layer_len / HASH_BYTES_LEN;
+
+    while (layer_len / HASH_BYTES_LEN > 1) {
+        //last layer before root
         debug!("layer_len == {}", layer_len);
         debug!("layer_counter == {}", layer_counter);
-        debug!("number fragment == {} over {} fragments", number_id_fragment, layer_len/HASH_BYTES_LEN);
+        debug!(
+            "number fragment == {} over {} fragments",
+            number_id_fragment,
+            layer_len / HASH_BYTES_LEN
+        );
         debug!("count_frag == {}", count_frag);
         debug!("fragment_indx start == {}", fragment_start_indx);
         let mut sibling_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
-//15158  23964
+
         let mut direction_sibling;
         if (number_id_fragment % 2 == 0) {
             direction_sibling = Direction::Right;
             sibling_fragment.copy_from_slice(
-                &hash_layers[fragment_start_indx + HASH_BYTES_LEN..fragment_start_indx + HASH_BYTES_LEN * 2],
+                &hash_layers[fragment_start_indx + HASH_BYTES_LEN
+                    ..fragment_start_indx + HASH_BYTES_LEN * 2],
             );
         } else {
             direction_sibling = Direction::Left;
-            sibling_fragment
-                .copy_from_slice(&hash_layers[(fragment_start_indx - HASH_BYTES_LEN)..fragment_start_indx]);
+            sibling_fragment.copy_from_slice(
+                &hash_layers[(fragment_start_indx - HASH_BYTES_LEN)..fragment_start_indx],
+            );
         }
-        
-        //let hash_sibling = blake3::hash(&sibling_fragment);
 
         if is_first_iter {
             sibling_fragment = *blake3::hash(&sibling_fragment).as_bytes();
             //debug!("Sibling_fragment hash == {:?}",sibling_fragment);
         }
-        // siblings.push(Sibling_Mod::new(hash_sibling, direction_sibling));
-        siblings.push(Sibling_Mod::new(blake3::Hash::from_bytes(sibling_fragment), direction_sibling));
+        siblings.push(Sibling_Mod::new(
+            blake3::Hash::from_bytes(sibling_fragment),
+            direction_sibling,
+        ));
 
         if is_first_iter {
             is_first_iter = false;
-            self_fragment
-                .copy_from_slice(&hash_layers[fragment_start_indx..fragment_start_indx + HASH_BYTES_LEN]);
+            self_fragment.copy_from_slice(
+                &hash_layers[fragment_start_indx..fragment_start_indx + HASH_BYTES_LEN],
+            );
         }
-        // layer_len = layer_len / 2;
-        // // layer_counter += layer_len;
-        // number_id_fragment = number_id_fragment/2;
-        // // fragment_indx = layer_counter + layer_len % HASH_BYTES_LEN;   Sbagliato credo
-        // fragment_start_indx = layer_counter + (number_id_fragment as usize)*HASH_BYTES_LEN;
-        // fragment_start_indx = (count_frag-1)*HASH_BYTES_LEN;
-        // layer_counter += layer_len;
-        // count_frag += layer_len/HASH_BYTES_LEN;
 
         layer_len = layer_len / 2;
-        // layer_counter += layer_len;
-        number_id_fragment = number_id_fragment/2;
-        // fragment_indx = layer_counter + layer_len % HASH_BYTES_LEN;   Sbagliato credo
-        // fragment_start_indx = layer_counter + (number_id_fragment as usize)*HASH_BYTES_LEN;
-
-        count_frag = layer_counter/HASH_BYTES_LEN + number_id_fragment as usize;
-
+        number_id_fragment = number_id_fragment / 2;
+        count_frag = layer_counter / HASH_BYTES_LEN + number_id_fragment as usize;
         layer_counter += layer_len;
-        // count_frag += number_id_fragment as usize;//layer_len/HASH_BYTES_LEN;
-
-
-        fragment_start_indx = (count_frag)*HASH_BYTES_LEN;
-
+        fragment_start_indx = (count_frag) * HASH_BYTES_LEN;
     }
     let self_fragment_hash = blake3::hash(&self_fragment);
-    debug!("Self_fragment xxx == {:?}\nSelf_fragment hash == {:?}",self_fragment,self_fragment_hash);
-    debug!("Siblings length == {:?}",siblings.len());
+    debug!(
+        "Self_fragment xxx == {:?}\nSelf_fragment hash == {:?}",
+        self_fragment, self_fragment_hash
+    );
+    debug!("Siblings length == {:?}", siblings.len());
 
     return (Proof_Mod::new(siblings), self_fragment, root_hash);
 
-//initialization: layer_len==500k, layer_counter==500k,
-//      number_id_fragment==position / HASH_BYTES_LEN, 
-//      fragment_start_indx==number_id_fragment*HASH_BYTES_LEN
-
-//iter1(end of first iter): layer_len==250k, layer_counter==750k,
-//      number_id_fragment==, 
-//      fragment_start_indx==
-
-
-//iter2: layer_len==, layer_counter==,
-//      number_id_fragment==, 
-//      fragment_start_indx==
-
-
-    //             A               
-    //         A       a     is index % 2 == 0 --> No then take sibling on the R
-    //       a   A   a   a   is index % 2 == 0 --> No then take sibling on the L
-    //      a a A a a a a a  is index % 2 == 0 --> Yes then take sibling on the R
-
-    //                    A               
+    //                    A
     //            A               a             is index % 2 == 0 --> No then take sibling on the R
     //        a       A       a       a         is index % 2 == 0 --> No then take sibling on the L
     //      a   a   A   a   a   a   a   a       is index % 2 == 0 --> Yes then take sibling on the R
     //     a a a a a A a a a a a a a a a a
-
     //                  Next level position di A is index = index / 2
     //                  At every new level, • Identify the reference position of A: the sibling is either on the left or on the right of A
     // a a A a a a a a  a A a a  A a  A
 }
 
-
-
 pub fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a [u8] {
-    // let mut stream_opt_clone = stream_opt.clone();
-    // let mut locked_stream = stream_opt_clone.lock().unwrap();//stream_opt.lock().unwrap().as_ref().clone();
     match stream.read(data) {
         Ok(size) => {
             return &data[..size];

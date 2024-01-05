@@ -1,4 +1,7 @@
-use crate::{Merkle_Tree::structs::{Direction, Proof, Proof_Mod, Sibling, Sibling_Mod}, block_generation::utils::Utils::HASH_BYTES_LEN};
+use crate::{
+    block_generation::utils::Utils::HASH_BYTES_LEN,
+    Merkle_Tree::structs::{Direction, Proof, Proof_Mod, Sibling, Sibling_Mod},
+};
 use log::debug;
 use talk::crypto::primitives::hash::Hash;
 
@@ -25,9 +28,13 @@ pub fn from_bytes_to_proof(vec: Vec<u8>) -> Proof_Mod {
     let mut siblings: Vec<Sibling_Mod> = Vec::new();
     let len_hash = 32;
     let mut i = 0;
-    debug!("from_bytes_to_proof: vec_len == {} \nvec == {:?}", vec.len(),vec);
+    debug!(
+        "from_bytes_to_proof: vec_len == {} \nvec == {:?}",
+        vec.len(),
+        vec
+    );
     while i < vec.len() {
-        debug!("from_bytes_to_proof: i == {}",i);
+        debug!("from_bytes_to_proof: i == {}", i);
         let direction: Direction;
         if vec[i] == 0 {
             direction = Direction::Left;
@@ -35,7 +42,7 @@ pub fn from_bytes_to_proof(vec: Vec<u8>) -> Proof_Mod {
         } else {
             direction = Direction::Right;
             debug!("DESTRA");
-        } 
+        }
         let mut hash_bytes: [u8; 32] = Default::default();
         hash_bytes.copy_from_slice(&vec[i + 1..i + 1 + HASH_BYTES_LEN]);
         debug!("from_bytes_to_proof: hash_bytes == {:?}", hash_bytes);

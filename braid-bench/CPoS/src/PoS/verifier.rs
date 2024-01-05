@@ -22,8 +22,8 @@ use crate::{
         blockgen::GROUP_SIZE,
         encoder::generate_block_group,
         utils::Utils::{
-            BATCH_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BYTES_PER_BLOCK_ID,
-            NUM_BYTES_PER_POSITION, VERIFIABLE_RATIO, FRAGMENT_SIZE,
+            BATCH_SIZE, FRAGMENT_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION,
+            NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, VERIFIABLE_RATIO,
         },
     },
     communication::{
@@ -33,7 +33,7 @@ use crate::{
             Failure_Reason, Fairness, Notification, Time_Verification_Status, Verification_Status,
         },
     },
-    Merkle_Tree::{client_verify::{get_root_hash, get_root_hash_mod}, structs::Id},
+    Merkle_Tree::client_verify::get_root_hash_mod,
 };
 
 use super::{structs::NotifyNode, utils::from_bytes_to_proof};
@@ -341,9 +341,7 @@ impl Verifier {
     fn check_byte_value(&mut self, block_id: u32, pos_in_block: u32, byte_received: u8) -> bool {
         let block_group: Vec<[u64; GROUP_SIZE]> =
             generate_block_group((block_id / GROUP_SIZE as u32).try_into().unwrap());
-        // warn!("generate_block_group with input == {}", block_id / GROUP_SIZE as u32);
-        //block from [0 to 3] within the blockgroup
-        //let block_num_in_group = pos_in_block % 4;
+
         let selected_arr: [u64; GROUP_SIZE] = block_group[(pos_in_block / 8) as usize]; //4 cells made of 8 bytes each
 
         let mut array_u8: [u8; 8 * GROUP_SIZE] = [0; 8 * GROUP_SIZE];
@@ -353,22 +351,8 @@ impl Verifier {
             array_u8[i * 8..(i + 1) * 8].copy_from_slice(&bytes);
         }
 
-        //PROVA A TENERE QUA SOTTO MODULO 8 E NON 32 ANCHE CON SIZE 4
-        //let byte_value   = array_u8[(pos_in_block % 8) as usize];
-        // let byte_value_2 = array_u8[8 + (pos_in_block % 8) as usize];
-        // let byte_value_3 = array_u8[16 + (pos_in_block % 8) as usize];
-        // let byte_value_4 = array_u8[24 + (pos_in_block % 8) as usize];
         let byte_value =
             array_u8[(block_id % GROUP_SIZE as u32) as usize * 8 + (pos_in_block % 8) as usize];
-
-        // let partblock = block_group[(block_id % 4) as usize];
-        // SBAGLIATOOOOOOOO SERVE POSITION NELL INDICE DEL BLOCK SOPRA CREDO
-        // let fragment = partblock[(pos_in_block/4) as usize];
-        // let byte_value = fragment.to_le_bytes()[(pos_in_block % 4) as usize];
-
-        //warn!("byte_arr_32 == {:?}",selected_arr);
-        //warn!("byte_arr == {:?}",array_u8);
-        //warn!("byte_val == {}, byte_val2 == {}, byte_val3 == {}, byte_val4 == {}", byte_value, byte_value_2, byte_value_3, byte_value_4);
 
         warn!(
             "byte_value_real == {} and byte_received == {}",
@@ -477,47 +461,41 @@ fn handle_inclusion_proof(
     debug!("V: curr_indx 0== {:?}", curr_indx);
 
     let mut block_id_in_bytes: [u8; NUM_BYTES_PER_BLOCK_ID] = [0; NUM_BYTES_PER_BLOCK_ID];
-    block_id_in_bytes
-        .copy_from_slice(&msg[curr_indx..curr_indx + NUM_BYTES_PER_BLOCK_ID]);
+    block_id_in_bytes.copy_from_slice(&msg[curr_indx..curr_indx + NUM_BYTES_PER_BLOCK_ID]);
     let block_id = u32::from_le_bytes(block_id_in_bytes);
     curr_indx += NUM_BYTES_PER_BLOCK_ID;
     debug!("V: curr_indx 1== {:?}", curr_indx);
 
     let mut position_in_bytes: [u8; NUM_BYTES_PER_POSITION] = [0; NUM_BYTES_PER_POSITION];
-    position_in_bytes.copy_from_slice(
-        &msg[curr_indx..curr_indx + NUM_BYTES_PER_POSITION],
-    );
+    position_in_bytes.copy_from_slice(&msg[curr_indx..curr_indx + NUM_BYTES_PER_POSITION]);
     let position = u32::from_le_bytes(position_in_bytes);
     curr_indx += NUM_BYTES_PER_POSITION;
     debug!("V: curr_indx 2== {:?}", curr_indx);
 
     let mut self_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
-    self_fragment.copy_from_slice(
-        &msg[curr_indx..curr_indx+FRAGMENT_SIZE],
-    );
+    self_fragment.copy_from_slice(&msg[curr_indx..curr_indx + FRAGMENT_SIZE]);
     curr_indx += FRAGMENT_SIZE;
     debug!("V: curr_indx 3== {:?}", curr_indx);
 
-    let proof = from_bytes_to_proof(
-        msg[curr_indx..].to_vec(),
-    );
+    let proof = from_bytes_to_proof(msg[curr_indx..].to_vec());
     debug!("V: curr_indx 4== {:?}", msg.len());
     //After retrieving the elements: insert the byte to be proved in the self_fragment at the correct index. Then, using something similar to the method get_root_hash retrieve the hash of the root
 
     debug!("V handle_inclusion_proof: len(root_hash_bytes) == {}, block_id == {}, position_in_byte == {}", root_hash_bytes.len(), block_id, position);
 
-    let mut byte_val = 0;
+    let byte_val;
     {
         byte_val = shared_map.lock().unwrap()[&(block_id, position)].0;
     }
     debug!("byte_val == {}", byte_val);
-    // let leaf_key = Id::<(u32, u32)>::new((block_id, position));
-    let root_hash_computed = get_root_hash_mod(
-        &proof, (block_id,position), byte_val, self_fragment,
-    );
+    let root_hash_computed =
+        get_root_hash_mod(&proof, (block_id, position), byte_val, self_fragment);
     let mut correctness_flag = 1;
-    debug!("root_hash_computed.as_bytes() == {:?}",root_hash_computed.as_bytes());
-    debug!("root_hash_bytes == {:?}",root_hash_bytes);
+    debug!(
+        "root_hash_computed.as_bytes() == {:?}",
+        root_hash_computed.as_bytes()
+    );
+    debug!("root_hash_bytes == {:?}", root_hash_bytes);
 
     if root_hash_computed.as_bytes() == &root_hash_bytes {
         //convert to byte array the hash_retrieved. Then compare.
