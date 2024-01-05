@@ -402,7 +402,7 @@ pub fn generate_proof_array(
         debug!("count_frag == {}", count_frag);
         debug!("fragment_indx start == {}", fragment_start_indx);
         let mut sibling_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
-
+//15158  23964
         let mut direction_sibling;
         if (number_id_fragment % 2 == 0) {
             direction_sibling = Direction::Right;
@@ -412,30 +412,51 @@ pub fn generate_proof_array(
         } else {
             direction_sibling = Direction::Left;
             sibling_fragment
-                .copy_from_slice(&hash_layers[fragment_start_indx - HASH_BYTES_LEN..fragment_start_indx]);
+                .copy_from_slice(&hash_layers[(fragment_start_indx - HASH_BYTES_LEN)..fragment_start_indx]);
         }
+        
+        //let hash_sibling = blake3::hash(&sibling_fragment);
 
-        let hash_sibling = blake3::hash(&sibling_fragment);
         if is_first_iter {
-            debug!("Sibling_fragment xxx == {:?}\n Sibling_fragment hash == {:?}",sibling_fragment,hash_sibling);
+            sibling_fragment = *blake3::hash(&sibling_fragment).as_bytes();
+            //debug!("Sibling_fragment hash == {:?}",sibling_fragment);
         }
-        siblings.push(Sibling_Mod::new(hash_sibling, direction_sibling));
+        // siblings.push(Sibling_Mod::new(hash_sibling, direction_sibling));
+        siblings.push(Sibling_Mod::new(blake3::Hash::from_bytes(sibling_fragment), direction_sibling));
+
         if is_first_iter {
             is_first_iter = false;
             self_fragment
                 .copy_from_slice(&hash_layers[fragment_start_indx..fragment_start_indx + HASH_BYTES_LEN]);
         }
+        // layer_len = layer_len / 2;
+        // // layer_counter += layer_len;
+        // number_id_fragment = number_id_fragment/2;
+        // // fragment_indx = layer_counter + layer_len % HASH_BYTES_LEN;   Sbagliato credo
+        // fragment_start_indx = layer_counter + (number_id_fragment as usize)*HASH_BYTES_LEN;
+        // fragment_start_indx = (count_frag-1)*HASH_BYTES_LEN;
+        // layer_counter += layer_len;
+        // count_frag += layer_len/HASH_BYTES_LEN;
+
         layer_len = layer_len / 2;
         // layer_counter += layer_len;
         number_id_fragment = number_id_fragment/2;
         // fragment_indx = layer_counter + layer_len % HASH_BYTES_LEN;   Sbagliato credo
-        fragment_start_indx = layer_counter + (number_id_fragment as usize)*HASH_BYTES_LEN;
-        layer_counter += layer_len;
+        // fragment_start_indx = layer_counter + (number_id_fragment as usize)*HASH_BYTES_LEN;
 
-        count_frag += layer_len/HASH_BYTES_LEN;
+        count_frag = layer_counter/HASH_BYTES_LEN + number_id_fragment as usize;
+
+        layer_counter += layer_len;
+        // count_frag += number_id_fragment as usize;//layer_len/HASH_BYTES_LEN;
+
+
+        fragment_start_indx = (count_frag)*HASH_BYTES_LEN;
+
     }
     let self_fragment_hash = blake3::hash(&self_fragment);
     debug!("Self_fragment xxx == {:?}\nSelf_fragment hash == {:?}",self_fragment,self_fragment_hash);
+    debug!("Siblings length == {:?}",siblings.len());
+
     return (Proof_Mod::new(siblings), self_fragment, root_hash);
 
 //initialization: layer_len==500k, layer_counter==500k,
@@ -452,10 +473,17 @@ pub fn generate_proof_array(
 //      fragment_start_indx==
 
 
-    //        A               
-    //    A       a     is index % 2 == 0 --> No then take sibling on the R
-    //  a   A   a   a   is index % 2 == 0 --> No then take sibling on the L
-    // a a A a a a a a  is index % 2 == 0 --> Yes then take sibling on the R
+    //             A               
+    //         A       a     is index % 2 == 0 --> No then take sibling on the R
+    //       a   A   a   a   is index % 2 == 0 --> No then take sibling on the L
+    //      a a A a a a a a  is index % 2 == 0 --> Yes then take sibling on the R
+
+    //                    A               
+    //            A               a             is index % 2 == 0 --> No then take sibling on the R
+    //        a       A       a       a         is index % 2 == 0 --> No then take sibling on the L
+    //      a   a   A   a   a   a   a   a       is index % 2 == 0 --> Yes then take sibling on the R
+    //     a a a a a A a a a a a a a a a a
+
     //                  Next level position di A is index = index / 2
     //                  At every new level, • Identify the reference position of A: the sibling is either on the left or on the right of A
     // a a A a a a a a  a A a a  A a  A

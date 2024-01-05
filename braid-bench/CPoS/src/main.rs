@@ -133,6 +133,19 @@ fn main() {
         let hvec = blake3::hash(&vec);
         println!("arr == {:?},\nvec == {:?}", harr,hvec);
 
+        let vec1 = vec![121, 42, 92, 135, 49, 186, 219, 126, 247, 25, 118, 177, 21, 79, 159, 252, 58, 185, 38, 205, 11, 82, 212, 176, 218, 91, 127, 156, 100, 213, 116, 29];
+        let vec2 = vec![22, 26, 39, 66, 49, 154, 130, 164, 210, 247, 195, 34, 166, 145, 59, 64, 20, 242, 245, 201, 171, 111, 105, 244, 91, 146, 248, 127, 238, 93, 32, 58];
+
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&vec2);
+        hasher.update(&vec1);
+        println!("FINALIZED == {:?}", hasher.finalize().as_bytes());
+
+        let mut hasherr = blake3::Hasher::new();
+        hasherr.update(&vec1);
+        hasherr.update(&vec2);
+        println!("FINALIZED r == {:?}", hasherr.finalize().as_bytes());
+
     } else {
         set_logger();
         //challenge: send 1(tag) + 1(seed)

@@ -521,6 +521,7 @@ fn handle_inclusion_proof(
 
     if root_hash_computed.as_bytes() == &root_hash_bytes {
         //convert to byte array the hash_retrieved. Then compare.
+        info!("CE L'HAI FATTA!!! SEI UN GRANDEEEEEEEE");
         correctness_flag = 0;
     }
     let mut update_new_proofs = Vec::new();

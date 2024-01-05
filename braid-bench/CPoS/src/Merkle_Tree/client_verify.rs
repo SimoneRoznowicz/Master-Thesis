@@ -34,7 +34,6 @@ pub fn get_root_hash_mod(proof: &Proof_Mod, key: (u32, u32), value: u8, mut self
     info!("Verifier: self_fragment == {:?}", self_fragment);
     let mut hash_final = blake3::hash(&self_fragment);
     debug!("HASH self fragment == {:?}",hash_final.as_bytes());
-
     for sibling in siblings {
         // let mut sibling_hash = sibling.get_hash().as_bytes();
         // let mut curr_hash;
