@@ -1,10 +1,10 @@
-use log::{debug, error, info, trace, warn};
-use serde_json::error;
+use log::{debug, info};
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use crate::block_generation::utils::Utils::{
-    NUM_BLOCKS_PER_UNIT, NUM_BLOCK_GROUPS_PER_UNIT, NUM_BYTES_IN_BLOCK, NUM_FRAGMENTS_PER_UNIT,
+    NUM_BLOCKS_PER_UNIT, NUM_BYTES_IN_BLOCK,
 };
 
 // pub fn handle_challenge(msg: &[u8], stream: &TcpStream, receiver: mpsc::Receiver<Signal>) {

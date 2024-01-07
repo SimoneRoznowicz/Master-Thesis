@@ -1,13 +1,10 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::net::TcpStream;
 
-use rand::seq::SliceRandom;
 
-use crate::block_generation::utils::Utils::{
-    BATCH_SIZE, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,
-    NUM_FRAGMENTS_PER_UNIT, NUM_PROOFS_TO_VERIFY,
-};
+
+
+
+
+
 
 // pub fn handle_verification(msg: &[u8], stream: &TcpStream) -> bool {
 //     return verify_time_challenge_bound() && verify_proofs(msg, stream); //if the first is wrong, don't execute verify_proofs

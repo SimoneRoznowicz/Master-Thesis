@@ -9,11 +9,11 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self};
 
 use log::{debug, error, info, trace, warn};
-use rand::seq::index;
-use serde_json::error;
+
+
 // use first_rust_project::src;
 
-use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE, SIZE};
+use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE};
 use crate::block_generation::encoder::generate_block_group;
 use crate::block_generation::utils::Utils::{
     BATCH_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,
@@ -22,7 +22,7 @@ use crate::block_generation::utils::Utils::{
 use crate::communication::client::send_msg;
 use crate::communication::handle_prover::random_path_generator1;
 use crate::communication::structs::Notification;
-use crate::Merkle_Tree::structs::{Direction, Proof_Mod, Sibling, Sibling_Mod};
+use crate::Merkle_Tree::structs::{Direction, Proof_Mod, Sibling_Mod};
 
 use super::structs::NotifyNode;
 use super::utils::from_proof_to_bytes;
@@ -53,7 +53,7 @@ impl Prover {
 
     pub fn new(address: String, verifier_address: String, sender: Sender<NotifyNode>) -> Prover {
         debug!("beginning of new Prover");
-        let mut unit: Vec<FragmentGroup> = Vec::new();
+        let unit: Vec<FragmentGroup> = Vec::new();
 
         let new_file = OpenOptions::new()
             .create(true)
@@ -62,7 +62,7 @@ impl Prover {
             .write(true)
             .open("test_main.bin")
             .unwrap();
-        let mut file2 = OpenOptions::new()
+        let _file2 = OpenOptions::new()
             .create(true)
             .append(true)
             .read(true)
@@ -77,7 +77,7 @@ impl Prover {
             for i in 0..NUM_BLOCK_GROUPS_PER_UNIT {
                 let block_group = generate_block_group(i);
                 debug!("4 Blocks generated");
-                let mut cc: u64 = 0;
+                let _cc: u64 = 0;
                 for i in 0..GROUP_SIZE {
                     debug!("Group Size iteration i == {}", i);
                     for j in 0..block_group.len() {
@@ -118,7 +118,7 @@ impl Prover {
     pub fn start_server(&mut self, sender: Sender<NotifyNode>) {
         info!("Prover server listening on address {}", self.address);
         let listener = TcpListener::bind(&self.address).unwrap();
-        let mut stream = listener.accept().unwrap().0;
+        let stream = listener.accept().unwrap().0;
         self.stream_opt = Some(stream.try_clone().unwrap());
 
         thread::spawn(move || {
@@ -133,7 +133,7 @@ impl Prover {
     }
 
     pub fn main_handler(&mut self, receiver: &Receiver<NotifyNode>) {
-        let counter = 0;
+        let _counter = 0;
         let mut is_started = false;
         loop {
             match receiver.try_recv() {
@@ -221,7 +221,8 @@ impl Prover {
         // Generate and send all the requested Inclusion Proofs:
         // Send a buffer containing in order: tag, hash and proof
         info!("Generate Merkle Tree and send each created inclusion proofs");
-        for (indx, _) in block_ids.iter().enumerate() {
+        for indx in 0..block_ids.len() {
+            debug!("indx == {}", indx);
             //send root_hash + proof + 32_byte_fragment
 
             let (proof_mod, self_fragment, root_hash) =
@@ -240,14 +241,9 @@ impl Prover {
             msg.extend_from_slice(&self_fragment); //self_fragment
             msg.extend_from_slice(&bytes_proof); //proof
 
-            debug!(
-                "bytes_proof len == {:?} and bytes_proof == {:?}",
-                bytes_proof.len(),
-                bytes_proof
-            );
-
+            
+            debug!("Sent incl proof number {} out of {} proofs to be verified", indx, block_ids.len());
             send_msg(&self.stream_opt.as_ref().unwrap(), &msg);
-            break;
         }
     }
 }
@@ -276,8 +272,8 @@ pub fn generate_proof_array(
         .open("hash-layers.txt")
         .unwrap();
     let mut i = 0;
-    let mut counter = 0;
-    while (i + HASH_BYTES_LEN < hash_layers.len()) {
+    let _counter = 0;
+    while i + HASH_BYTES_LEN < hash_layers.len() {
         let mut first_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
         first_fragment.copy_from_slice(&hash_layers[i..i + HASH_BYTES_LEN]);
 
@@ -289,13 +285,13 @@ pub fn generate_proof_array(
             second_fragment = *blake3::hash(&second_fragment).as_bytes();
 
             for b in &first_fragment {
-                let mut ccstr: String = b.to_string() + ", ";
+                let ccstr: String = b.to_string() + ", ";
                 file2.write(ccstr.as_bytes());
             }
             file2.write("*\n".to_string().as_bytes());
 
             for b in &second_fragment {
-                let mut ccstr = b.to_string() + ", ";
+                let ccstr = b.to_string() + ", ";
                 file2.write(ccstr.as_bytes());
             }
             file2.write("*\n".to_string().as_bytes());
@@ -352,7 +348,7 @@ pub fn generate_proof_array(
         counter += 1;
     }
     debug!("root_hash == {:?}", root_hash);
-    let mut i = 0;
+    let _i = 0;
     let mut layer_len = buffer.len();
     let mut siblings = Vec::new();
 
@@ -363,7 +359,7 @@ pub fn generate_proof_array(
 
     let mut count_frag = layer_len / HASH_BYTES_LEN;
 
-    while (layer_len / HASH_BYTES_LEN > 1) {
+    while layer_len / HASH_BYTES_LEN > 1 {
         //last layer before root
         debug!("layer_len == {}", layer_len);
         debug!("layer_counter == {}", layer_counter);
@@ -376,8 +372,8 @@ pub fn generate_proof_array(
         debug!("fragment_indx start == {}", fragment_start_indx);
         let mut sibling_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
 
-        let mut direction_sibling;
-        if (number_id_fragment % 2 == 0) {
+        let direction_sibling;
+        if number_id_fragment % 2 == 0 {
             direction_sibling = Direction::Right;
             sibling_fragment.copy_from_slice(
                 &hash_layers[fragment_start_indx + HASH_BYTES_LEN
@@ -457,7 +453,7 @@ pub fn create_and_send_proof_batches(
     debug!("Preparing batch of proofs.");
     error!("SEED == {}", seed);
     let init_iteration = iteration;
-    while (iteration < init_iteration + proof_batch.len() as u32) {
+    while iteration < init_iteration + proof_batch.len() as u32 {
         (block_id, position, seed) = random_path_generator1(seed, iteration as u8);
 
         proof_batch[(iteration - init_iteration) as usize] =
@@ -542,7 +538,7 @@ pub fn read_byte_from_file(shared_file: &Arc<Mutex<File>>, block_id: u32, positi
     let mut file = shared_file.lock().unwrap();
     let index = (block_id * NUM_BYTES_IN_BLOCK) as u64 + position as u64;
 
-    let metadata = file.metadata();
+    let _metadata = file.metadata();
     //debug!("block_id == {} while position == {}", block_id, position);
     //debug!("index == {} while file is long {}", index, metadata.unwrap().len());
 
@@ -568,7 +564,7 @@ pub fn read_block_from_file(
     let mut file = shared_file.lock().unwrap();
     let index = (block_id * NUM_BYTES_IN_BLOCK) as u64;
 
-    let metadata = file.metadata();
+    let _metadata = file.metadata();
     //debug!("block_id == {} while position == {}", block_id, position);
     //debug!("index == {} while file is long {}", index, metadata.unwrap().len());
 

@@ -1,12 +1,12 @@
-use aes::cipher::Counter;
+
+use aes::cipher::typenum::Len;
 use log::{debug, error, info, trace, warn};
 use rand::Rng;
-use serde_json::error;
+
 use std::{
     collections::HashMap,
     io::Read,
     net::{Shutdown, TcpStream},
-    os::windows::io::AsSocket,
     sync::{
         mpsc::{self, Receiver, Sender},
         Arc, Mutex,
@@ -15,14 +15,14 @@ use std::{
     time::Duration,
     vec,
 };
-use talk::crypto::primitives::hash::HASH_LENGTH;
+
 
 use crate::{
     block_generation::{
         blockgen::GROUP_SIZE,
         encoder::generate_block_group,
         utils::Utils::{
-            BATCH_SIZE, FRAGMENT_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION,
+            FRAGMENT_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION,
             NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, VERIFIABLE_RATIO,
         },
     },
@@ -82,7 +82,7 @@ impl Verifier {
                     info!("Connection Successful!");
                     break;
                 }
-                Err(e) => {
+                Err(_e) => {
                     warn!("Connection was not possible. Retry in 2 seconds...");
                     thread::sleep(Duration::from_secs(2));
                 }
@@ -98,7 +98,7 @@ impl Verifier {
         let shared_mapping_bytes = Arc::new(Mutex::new(mapping_bytes));
 
         //let hash:[u8; HASH_LENGTH] = Default::default();
-        let mut counter = 0;
+        let counter = 0;
         let mut this = Self {
             address,
             prover_address,
@@ -145,7 +145,7 @@ impl Verifier {
                                 let sender_clone = sender.clone();
                                 let mut proofs_clone = self.proofs.clone();
                                 self.counter += 1;
-                                let mut counter_clone = self.counter;
+                                let counter_clone = self.counter;
                                 Some(thread::spawn(move || {
                                     if is_stopped == false {
                                         info!("Verifier received notification: Verification");
@@ -198,6 +198,24 @@ impl Verifier {
                                                 notification: Notification::Terminate,
                                             })
                                             .unwrap();
+                                    }
+                                    else {
+                                        info!("Correctly verified one proof ✅");
+                                        if self.shared_mapping_bytes.lock().unwrap().is_empty(){
+                                            self.is_terminated = true;
+                                            self.is_fair = true;
+                                            let terminate_vector = vec![0]; //Fair
+                                            sender
+                                                .send(NotifyNode {
+                                                    buff: terminate_vector,
+                                                    notification: Notification::Terminate,
+                                                })
+                                                .unwrap();
+                                        }
+                                        else {
+                                            info!("Not all the requested proofs were received and verified");
+                                            //info!("Missing: {}, missing is {:?}", self.shared_mapping_bytes.lock().unwrap().len(), self.shared_mapping_bytes.lock().unwrap());
+                                        }
                                     }
                                 }
                             }
@@ -263,7 +281,7 @@ impl Verifier {
             //dovrebbe essere una map con key u8 ovvero block_id e value u8 ovvero la position del byte nel block
         }
 
-        let proofs_len = msg.len() as u32;
+        let _proofs_len = msg.len() as u32;
         let mut verfiable_ratio = VERIFIABLE_RATIO;
         if VERIFIABLE_RATIO == 0.0 {
             warn!("VERIFIABLE_RATIO was set to 0: it was reset to 0.5");
@@ -329,9 +347,6 @@ impl Verifier {
         send_msg(&self.stream, &verified_blocks_and_positions);
         return true;
     }
-    //[2023-12-18T13:54:24Z DEBUG CPoS::PoS::verifier] V: k==0 and block_id == 18 and pos == 282451
-    //[2023-12-18T13:54:25Z DEBUG CPoS::PoS::verifier] V: k==1 and block_id == 3 and pos == 271767
-    //[2023-12-18T13:54:31Z DEBUG CPoS::PoS::verifier] V: k==8 and block_id == 4 and pos == 471803
 
     //[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15]]
     //blockid 10
@@ -454,7 +469,7 @@ fn handle_inclusion_proof(
 ) {
     let mut curr_indx = 0;
     //SO THE MESSAGE WILL BE EVENTALLY: HASH,block_id,byte_position,self_fragment,proof
-    debug!("V: Inside handle_inclusion_proof func msg == {:?}", msg);
+    //debug!("V: Inside handle_inclusion_proof func msg == {:?}", msg);
     let mut root_hash_bytes: [u8; HASH_BYTES_LEN] = Default::default();
     root_hash_bytes.copy_from_slice(&msg[..HASH_BYTES_LEN]);
     curr_indx += HASH_BYTES_LEN;
@@ -501,12 +516,12 @@ fn handle_inclusion_proof(
         //convert to byte array the hash_retrieved. Then compare.
         info!("CE L'HAI FATTA!!! SEI UN GRANDEEEEEEEE");
         correctness_flag = 0;
+        shared_map.lock().unwrap().remove(&(block_id,position));
     }
     let mut update_new_proofs = Vec::new();
     update_new_proofs.push(1);
     update_new_proofs.push(correctness_flag);
 
-    //HOW TO CHECK THAT ALL INCLUSION PROOFS WERE RECEIVED: you can simply remove the entry from the map when you receive the corresponding inclusion proof
     sender
         .send(NotifyNode {
             buff: update_new_proofs,

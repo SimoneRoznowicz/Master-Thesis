@@ -1,5 +1,5 @@
 use crate::{
-    block_generation::utils::Utils::{FRAGMENT_SIZE, HASH_BYTES_LEN},
+    block_generation::utils::Utils::{FRAGMENT_SIZE},
     Merkle_Tree::{node_generic::*, structs::*},
 };
 use log::{debug, info};
@@ -40,7 +40,7 @@ pub fn get_root_hash_mod(
     self_fragment[indx_byte_in_self_fragment as usize] = value;
     info!("Verifier: self_fragment == {:?}", self_fragment);
     let mut hash_final = blake3::hash(&self_fragment);
-    debug!("HASH self fragment == {:?}", hash_final.as_bytes());
+    //debug!("HASH self fragment == {:?}", hash_final.as_bytes());
     for sibling in siblings {
         // let mut sibling_hash = sibling.get_hash().as_bytes();
         // let mut curr_hash;
@@ -51,20 +51,20 @@ pub fn get_root_hash_mod(
             Direction::Left => {
                 let mut hasher = blake3::Hasher::new();
                 hasher.update(sibling.get_hash().as_bytes());
-                debug!("Left: Sibling hash == {:?}", sibling.get_hash().as_bytes());
+                //debug!("Left: Sibling hash == {:?}", sibling.get_hash().as_bytes());
                 hasher.update(hash_final.as_bytes());
-                debug!("Left: curr_hash == {:?}", hash_final.as_bytes());
+                //debug!("Left: curr_hash == {:?}", hash_final.as_bytes());
                 hash_final = hasher.finalize();
-                debug!("Left: hash_final == {:?}", hash_final.as_bytes());
+                //debug!("Left: hash_final == {:?}", hash_final.as_bytes());
             }
             Direction::Right => {
                 let mut hasher = blake3::Hasher::new();
                 hasher.update(hash_final.as_bytes());
-                debug!("Right: curr_hash == {:?}", hash_final.as_bytes());
+                //debug!("Right: curr_hash == {:?}", hash_final.as_bytes());
                 hasher.update(sibling.get_hash().as_bytes());
-                debug!("Right: Sibling hash == {:?}", sibling.get_hash().as_bytes());
+                //debug!("Right: Sibling hash == {:?}", sibling.get_hash().as_bytes());
                 hash_final = hasher.finalize();
-                debug!("Right: hash_final == {:?}", hash_final.as_bytes());
+                //debug!("Right: hash_final == {:?}", hash_final.as_bytes());
             }
         }
     }
