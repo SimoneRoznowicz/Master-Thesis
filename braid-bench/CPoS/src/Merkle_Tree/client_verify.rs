@@ -1,9 +1,15 @@
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
 use crate::{
-    block_generation::utils::Utils::{FRAGMENT_SIZE},
+    block_generation::utils::Utils::FRAGMENT_SIZE,
     Merkle_Tree::{node_generic::*, structs::*},
 };
-use log::{debug, info};
+use log::{debug, error, info};
 use serde::Serialize;
+use serde_json::error;
 use talk::crypto::primitives::hash::{hash, Hash};
 
 /// Returns the Hash of the root, computed according to the given proof.
@@ -29,22 +35,36 @@ where
 pub fn get_root_hash_mod(
     proof: &Proof_Mod,
     key: (u32, u32),
-    value: u8,
+    shared_map: &Arc<Mutex<HashMap<(u32, u32), u8>>>,
     mut self_fragment: [u8; FRAGMENT_SIZE],
 ) -> blake3::Hash {
+    let block_id = key.0;
     let position = key.1;
+
     let indx_byte_in_self_fragment = position % FRAGMENT_SIZE as u32;
     let siblings: &Vec<Sibling_Mod> = proof.get_siblings();
-    // let my_leaf = Leaf::<K, T>::new(id.get_key().clone(), my_transactions);
 
-    self_fragment[indx_byte_in_self_fragment as usize] = value;
+    {
+        match shared_map
+            .lock()
+            .unwrap()
+            .get(&(block_id.clone(), position.clone()))
+        {
+            Some(value) => {
+                self_fragment[indx_byte_in_self_fragment as usize] = *value;
+            }
+            None => {
+                error!("Do not check this inclusion proof with my innput value");
+            }
+        };
+    }
+
     info!("Verifier: self_fragment == {:?}", self_fragment);
     let mut hash_final = blake3::hash(&self_fragment);
     //debug!("HASH self fragment == {:?}", hash_final.as_bytes());
     for sibling in siblings {
-        // let mut sibling_hash = sibling.get_hash().as_bytes();
-        // let mut curr_hash;
-        // curr_hash = hash_final.as_bytes();
+        let sibling_hash = sibling.get_hash().as_bytes();
+        let curr_hash = hash_final.as_bytes();
         // debug!("HASH FINAL == {:?}",hash_final.as_bytes());
         // debug!("Sibling.get_hash() == {:?}", sibling.get_hash().as_bytes());
         match sibling.get_direction() {

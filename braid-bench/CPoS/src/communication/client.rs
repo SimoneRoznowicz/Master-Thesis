@@ -1,10 +1,9 @@
 use std::io::Write;
 use std::net::TcpStream;
 
-
 extern crate env_logger;
 extern crate log;
-use log::{error};
+use log::error;
 
 pub fn send_msg(mut stream: &TcpStream, msg: &[u8]) {
     match stream.write(msg) {

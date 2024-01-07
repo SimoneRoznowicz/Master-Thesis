@@ -1,17 +1,16 @@
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
+use std::time::{Instant, Duration};
+
 
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::{Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
-use std::thread::{self};
+use std::thread::{self, sleep};
 
 use log::{debug, error, info, trace, warn};
-
-
-// use first_rust_project::src;
 
 use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE};
 use crate::block_generation::encoder::generate_block_group;
@@ -55,6 +54,15 @@ impl Prover {
         debug!("beginning of new Prover");
         let unit: Vec<FragmentGroup> = Vec::new();
 
+        match fs::remove_file("test_main.bin") {
+            Ok(()) => {
+                println!("File removed successfully.");
+            }
+            Err(err) => {
+                eprintln!("Error removing file: {:?}", err);
+            }
+        }
+
         let new_file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -62,22 +70,29 @@ impl Prover {
             .write(true)
             .open("test_main.bin")
             .unwrap();
-        let _file2 = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .read(true)
-            .write(true)
-            .open("test_main.txt")
-            .unwrap();
+        // let _file2 = OpenOptions::new()
+        //     .create(true)
+        //     .append(true)
+        //     .read(true)
+        //     .write(true)
+        //     .open("test_main.txt")
+        //     .unwrap();
 
+        let mut time_block_creation: Vec<u128> = Vec::new();
         let shared_file = Arc::new(Mutex::new(new_file));
         {
             //File of total length (2^21)*(NUM_BLOCK_GROUPS_PER_UNIT)
             let mut file = shared_file.lock().unwrap();
             for i in 0..NUM_BLOCK_GROUPS_PER_UNIT {
+                let start_time = Instant::now();
                 let block_group = generate_block_group(i);
+                let end_time = Instant::now();
+                time_block_creation.push(end_time.duration_since(start_time).as_micros());
+                debug!("time {:?}", (end_time-start_time).as_micros());
+                debug!("time {:?}", (end_time-start_time).as_millis());
+
                 debug!("4 Blocks generated");
-                let _cc: u64 = 0;
+                // let _cc: u64 = 0;
                 for i in 0..GROUP_SIZE {
                     debug!("Group Size iteration i == {}", i);
                     for j in 0..block_group.len() {
@@ -96,7 +111,8 @@ impl Prover {
                 }
             }
         }
-
+        let sum_time_blocks_creation: u128 = time_block_creation.iter().sum();
+        debug!("Average time passed for 4 blocks creation is {:?}", sum_time_blocks_creation as f64/(1000.0*time_block_creation.len() as f64));
         let mut encoded: Vec<u8> = bincode::serialize(&unit).unwrap();
         let _enc_slice: &[u8] = encoded.as_mut_slice();
 
@@ -193,7 +209,6 @@ impl Prover {
         let mut positions: Vec<u32> = Vec::new();
         let mut i = 1;
         // Retrieve block_ids and positions from msg by the verifier
-        error!("MSG IN PROVER TO CREATE INC PROOFS == {:?}", msg);
         while i < msg.len() {
             let mut index_array: [u8; NUM_BYTES_PER_BLOCK_ID] = [0; NUM_BYTES_PER_BLOCK_ID];
             index_array.copy_from_slice(&msg[i..i + NUM_BYTES_PER_BLOCK_ID]);
@@ -241,9 +256,14 @@ impl Prover {
             msg.extend_from_slice(&self_fragment); //self_fragment
             msg.extend_from_slice(&bytes_proof); //proof
 
-            
-            debug!("Sent incl proof number {} out of {} proofs to be verified", indx, block_ids.len());
+            //19, 271661
+            debug!(
+                "Sent incl proof number {} out of {} proofs to be verified",
+                indx,
+                block_ids.len()
+            );
             send_msg(&self.stream_opt.as_ref().unwrap(), &msg);
+            //thread::sleep(Duration::from_secs(2));
         }
     }
 }
@@ -264,13 +284,13 @@ pub fn generate_proof_array(
     let mut fragment_start_indx = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
     debug!("fragment_start_indx is {}", fragment_start_indx);
 
-    let mut file2 = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .read(true)
-        .write(true)
-        .open("hash-layers.txt")
-        .unwrap();
+    // let mut file2 = OpenOptions::new()
+    //     .create(true)
+    //     .append(true)
+    //     .read(true)
+    //     .write(true)
+    //     .open("hash-layers.txt")
+    //     .unwrap();
     let mut i = 0;
     let _counter = 0;
     while i + HASH_BYTES_LEN < hash_layers.len() {
@@ -284,43 +304,43 @@ pub fn generate_proof_array(
             first_fragment = *blake3::hash(&first_fragment).as_bytes();
             second_fragment = *blake3::hash(&second_fragment).as_bytes();
 
-            for b in &first_fragment {
-                let ccstr: String = b.to_string() + ", ";
-                file2.write(ccstr.as_bytes());
-            }
-            file2.write("*\n".to_string().as_bytes());
+            // for b in &first_fragment {
+            //     let ccstr: String = b.to_string() + ", ";
+            //     file2.write(ccstr.as_bytes());
+            // }
+            // file2.write("*\n".to_string().as_bytes());
 
-            for b in &second_fragment {
-                let ccstr = b.to_string() + ", ";
-                file2.write(ccstr.as_bytes());
-            }
-            file2.write("*\n".to_string().as_bytes());
+            // for b in &second_fragment {
+            //     let ccstr = b.to_string() + ", ";
+            //     file2.write(ccstr.as_bytes());
+            // }
+            // file2.write("*\n".to_string().as_bytes());
         }
         let mut hasher = blake3::Hasher::new();
         hasher.update(&first_fragment);
         hasher.update(&second_fragment);
         let new_hash = hasher.finalize();
         if i == fragment_start_indx as usize {
-            debug!(
-                "Real first_fragment == {:?}\nReal second_fragment == {:?}\nNew_hash == {:?}",
-                first_fragment,
-                second_fragment,
-                new_hash.as_bytes()
-            );
+            // debug!(
+            //     "Real first_fragment == {:?}\nReal second_fragment == {:?}\nNew_hash == {:?}",
+            //     first_fragment,
+            //     second_fragment,
+            //     new_hash.as_bytes()
+            // );
         }
         if i == fragment_start_indx as usize - HASH_BYTES_LEN {
-            debug!(
-                "*Real first_fragment == {:?}\nReal second_fragment == {:?}\nNew_hash == {:?}",
-                first_fragment,
-                second_fragment,
-                new_hash.as_bytes()
-            );
+            // debug!(
+            //     "*Real first_fragment == {:?}\nReal second_fragment == {:?}\nNew_hash == {:?}",
+            //     first_fragment,
+            //     second_fragment,
+            //     new_hash.as_bytes()
+            // );
         }
         hash_layers.extend(new_hash.as_bytes());
 
         i = i + HASH_BYTES_LEN * 2;
     }
-    file2.write("\nFINE".to_string().as_bytes());
+    //file2.write("\nFINE".to_string().as_bytes());
 
     root_hash.copy_from_slice(&hash_layers[hash_layers.len() - HASH_BYTES_LEN..]);
 
@@ -338,9 +358,9 @@ pub fn generate_proof_array(
             flag = true;
         }
 
-        if flag == true {
-            file2.write(ccstr.as_bytes());
-        }
+        // if flag == true {
+        //     file2.write(ccstr.as_bytes());
+        // }
         if counter == lay_len {
             counter = 0;
             lay_len = lay_len / 2;
@@ -451,7 +471,7 @@ pub fn create_and_send_proof_batches(
     let mut position: u32 = INITIAL_POSITION; // Given parameter
     let mut proof_batch: [u8; BATCH_SIZE] = [0; BATCH_SIZE];
     debug!("Preparing batch of proofs.");
-    error!("SEED == {}", seed);
+    debug!("Initial random seed == {}", seed);
     let init_iteration = iteration;
     while iteration < init_iteration + proof_batch.len() as u32 {
         (block_id, position, seed) = random_path_generator1(seed, iteration as u8);
@@ -515,22 +535,24 @@ pub fn send_create_inclusion_proofs(msg: &[u8], sender: &Sender<NotifyNode>) {
 }
 
 pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
-    let tag = msg[0];
-    debug!("msg == {}", msg[0]);
-    if tag == 0 {
-        //Notify the main thread to start creating proof
-        trace!("In prover the tag is 0");
-        send_start_notification(msg, &sender);
-    } else if tag == 2 {
-        //Notify the main thread to stop creating proofs
-        trace!("In prover the tag is 2");
-        send_stop_notification(&sender);
-    } else if tag == 3 {
-        //Notify the main thread to start creating inclusion proofs
-        trace!("In prover the tag is 3");
-        send_create_inclusion_proofs(msg, &sender);
-    } else {
-        error!("In prover the tag is NOT 0 and NOT 2: the tag is {}", tag)
+    if !msg.is_empty() {
+        let tag = msg[0];
+        debug!("msg == {}", msg[0]);
+        if tag == 0 {
+            //Notify the main thread to start creating proof
+            trace!("In prover the tag is 0");
+            send_start_notification(msg, &sender);
+        } else if tag == 2 {
+            //Notify the main thread to stop creating proofs
+            trace!("In prover the tag is 2");
+            send_stop_notification(&sender);
+        } else if tag == 3 {
+            //Notify the main thread to start creating inclusion proofs
+            trace!("In prover the tag is 3");
+            send_create_inclusion_proofs(msg, &sender);
+        } else {
+            error!("In prover the tag is NOT 0 and NOT 2: the tag is {}", tag)
+        }
     }
 }
 

@@ -3,9 +3,7 @@ use log::{debug, info};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use crate::block_generation::utils::Utils::{
-    NUM_BLOCKS_PER_UNIT, NUM_BYTES_IN_BLOCK,
-};
+use crate::block_generation::utils::Utils::{NUM_BLOCKS_PER_UNIT, NUM_BYTES_IN_BLOCK};
 
 // pub fn handle_challenge(msg: &[u8], stream: &TcpStream, receiver: mpsc::Receiver<Signal>) {
 //     let mut counter = 0;

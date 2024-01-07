@@ -6,13 +6,14 @@ mod communication;
 extern crate env_logger;
 extern crate log;
 
-use std::fs::OpenOptions;
+use std::fs::{OpenOptions, self};
 use std::io::{Read, Write};
 use std::thread;
 use std::time::Duration;
 // use first_rust_project::Direction;
 
 
+use log::info;
 
 //use crate::communication::server::start_server;
 use crate::block_generation::blockgen::GROUP_SIZE;
@@ -26,32 +27,9 @@ use crate::PoS::verifier::Verifier;
 */
 fn set_logger() {
     env_logger::builder()
-        .filter_level(log::LevelFilter::Trace)
+        .filter_level(log::LevelFilter::Debug)
         .init();
 }
-
-// fn main(){
-//     let avg_step = 7;
-//     let mut res = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-//     res = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-//     println!("{}",res);
-//     res = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-//     println!("{}",res);
-//     res = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-//     println!("{}",res);
-//     res = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-//     println!("{}",res);
-//     res = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-//     println!("{}",res);
-//     res = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-//     println!("{}",res);
-//     res = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-//     println!("{}",res);
-//     res = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-//     println!("{}",res);
-//     res = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-//     println!("{}",res);
-// }
 
 // block_id == 0 while position == 406227  225
 
@@ -62,6 +40,14 @@ fn set_logger() {
 fn main() {
     let is_test = false;
     if is_test {
+        match fs::remove_file("test_main.bin") {
+            Ok(()) => {
+                info!("Previous file removed successfully.");
+            }
+            Err(err) => {
+                eprintln!("Error removing file: {:?}", err);
+            }
+        }
         let mut file = OpenOptions::new()
             .create(true)
             .read(true)
@@ -71,11 +57,6 @@ fn main() {
         let block_group = generate_block_group(0);
         let _block: Vec<u64> = block_group[0].to_vec();
         let _bufu8: Vec<u8> = Vec::new();
-
-        // for &bytesu64 in &block {
-        //     let bytes: [u8; 8] = bytesu64.to_be_bytes();
-        //     bufu8.extend_from_slice(&bytes);
-        // }
 
         let block_group: Vec<[u64; GROUP_SIZE]> = generate_block_group(0);
         println!("4 Blocks generated");
@@ -175,7 +156,7 @@ fn main() {
         thread::spawn(move || {
             Prover::start(addres_prover_clone, addres_verifier_clone);
         });
-        thread::sleep(Duration::from_secs(5));
+        //thread::sleep(Duration::from_secs(5));
         Verifier::start(address_verifier, address_prover);
         thread::sleep(Duration::from_secs(100));
     }

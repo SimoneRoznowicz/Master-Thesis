@@ -4,7 +4,6 @@ use crate::{
 };
 use log::debug;
 
-
 // Helper function to convert the Proof struct into a vector of bytes
 pub fn from_proof_to_bytes<'a>(proof: Proof_Mod, vec: &mut Vec<u8>) /*-> &'a Vec<u8>*/
 {

@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 // pub fn handle_verification(msg: &[u8], stream: &TcpStream) -> bool {
 //     return verify_time_challenge_bound() && verify_proofs(msg, stream); //if the first is wrong, don't execute verify_proofs
 // }

@@ -1,4 +1,3 @@
-
 use aes::cipher::typenum::Len;
 use log::{debug, error, info, trace, warn};
 use rand::Rng;
@@ -15,7 +14,6 @@ use std::{
     time::Duration,
     vec,
 };
-
 
 use crate::{
     block_generation::{
@@ -46,7 +44,7 @@ pub struct Verifier {
     proofs: Vec<u8>,
     is_fair: bool,
     is_terminated: bool,
-    shared_mapping_bytes: Arc<Mutex<HashMap<(u32, u32), (u8, bool)>>>, // k: (block_id,position) v: (byte_value, inclusion_proof_already_verified)
+    shared_mapping_bytes: Arc<Mutex<HashMap<(u32, u32), u8>>>, // k: (block_id,position) v: (byte_value, inclusion_proof_already_verified)
     //hash_root: [u8; HASH_LENGTH],
     status: (Verification_Status, Fairness),
     counter: u8, //FAKE TO BE ROMVED
@@ -94,7 +92,7 @@ impl Verifier {
         let status = (Verification_Status::Executing, Fairness::Undecided);
         let is_fair = true;
         let is_terminated = false;
-        let mapping_bytes: HashMap<(u32, u32), (u8, bool)> = HashMap::new();
+        let mapping_bytes: HashMap<(u32, u32), u8> = HashMap::new();
         let shared_mapping_bytes = Arc::new(Mutex::new(mapping_bytes));
 
         //let hash:[u8; HASH_LENGTH] = Default::default();
@@ -198,10 +196,9 @@ impl Verifier {
                                                 notification: Notification::Terminate,
                                             })
                                             .unwrap();
-                                    }
-                                    else {
+                                    } else {
                                         info!("Correctly verified one proof ✅");
-                                        if self.shared_mapping_bytes.lock().unwrap().is_empty(){
+                                        if self.shared_mapping_bytes.lock().unwrap().is_empty() {
                                             self.is_terminated = true;
                                             self.is_fair = true;
                                             let terminate_vector = vec![0]; //Fair
@@ -211,10 +208,17 @@ impl Verifier {
                                                     notification: Notification::Terminate,
                                                 })
                                                 .unwrap();
-                                        }
-                                        else {
+                                        } else {
                                             info!("Not all the requested proofs were received and verified");
-                                            //info!("Missing: {}, missing is {:?}", self.shared_mapping_bytes.lock().unwrap().len(), self.shared_mapping_bytes.lock().unwrap());
+                                            {
+                                                let curr_map =
+                                                    self.shared_mapping_bytes.lock().unwrap();
+                                                info!(
+                                                    "missing len == {}, missing map == {:?}",
+                                                    curr_map.len(),
+                                                    curr_map
+                                                );
+                                            }
                                         }
                                     }
                                 }
@@ -305,11 +309,15 @@ impl Verifier {
         verified_blocks_and_positions.push(3); //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
         while i < msg.len() as i32 {
             {
-                self.shared_mapping_bytes
-                    .lock()
-                    .unwrap()
-                    .insert((block_id, position), (0, false));
+                self.shared_mapping_bytes.lock().unwrap().insert(
+                    (block_ids_pos[i as usize].0, block_ids_pos[i as usize].1),
+                    0,
+                );
             }
+            debug!(
+                "*I am printing blockid == {} and position == {}",
+                block_id, position
+            );
             warn!(
                 "V: Iteration: {}, block_id = {}, position = {}, value = {}",
                 i, block_ids_pos[i as usize].0, block_ids_pos[i as usize].1, msg[i as usize]
@@ -340,10 +348,7 @@ impl Verifier {
             k += 1;
         }
         info!("Successful Correctness Verification");
-        error!(
-            "V: verified_blocks_and_positions == {:?}",
-            verified_blocks_and_positions
-        );
+
         send_msg(&self.stream, &verified_blocks_and_positions);
         return true;
     }
@@ -373,11 +378,15 @@ impl Verifier {
             "byte_value_real == {} and byte_received == {}",
             byte_value, byte_received
         );
+        debug!(
+            "I am printing blockid == {} and position == {}",
+            block_id, pos_in_block
+        );
         {
             self.shared_mapping_bytes
                 .lock()
                 .unwrap()
-                .insert((block_id, pos_in_block), (byte_value, false));
+                .insert((block_id, pos_in_block), byte_value);
         }
         return byte_value == byte_received;
     }
@@ -462,10 +471,14 @@ fn handle_verification(
     }
 }
 
+// fn get_byte_val(shared_map: &Arc<Mutex<HashMap<(u32, u32), u8>>>, block_id: u32, position: u32) -> Option<&u8>{
+//     return shared_map.lock().unwrap().get(&(block_id.clone(), position.clone()));
+// }
+
 fn handle_inclusion_proof(
     msg: &[u8],
     sender: &Sender<NotifyNode>,
-    shared_map: Arc<Mutex<HashMap<(u32, u32), (u8, bool)>>>,
+    shared_map: Arc<Mutex<HashMap<(u32, u32), u8>>>,
 ) {
     let mut curr_indx = 0;
     //SO THE MESSAGE WILL BE EVENTALLY: HASH,block_id,byte_position,self_fragment,proof
@@ -498,13 +511,10 @@ fn handle_inclusion_proof(
 
     debug!("V handle_inclusion_proof: len(root_hash_bytes) == {}, block_id == {}, position_in_byte == {}", root_hash_bytes.len(), block_id, position);
 
-    let byte_val;
-    {
-        byte_val = shared_map.lock().unwrap()[&(block_id, position)].0;
-    }
-    debug!("byte_val == {}", byte_val);
+    //let byte_val_opt = get_byte_val(&shared_map, block_id, position);
+
     let root_hash_computed =
-        get_root_hash_mod(&proof, (block_id, position), byte_val, self_fragment);
+        get_root_hash_mod(&proof, (block_id, position), &shared_map, self_fragment);
     let mut correctness_flag = 1;
     debug!(
         "root_hash_computed.as_bytes() == {:?}",
@@ -516,7 +526,12 @@ fn handle_inclusion_proof(
         //convert to byte array the hash_retrieved. Then compare.
         info!("CE L'HAI FATTA!!! SEI UN GRANDEEEEEEEE");
         correctness_flag = 0;
-        shared_map.lock().unwrap().remove(&(block_id,position));
+        {
+            debug!("map before == {:?}", shared_map.lock().unwrap());
+        }
+        {
+            shared_map.lock().unwrap().remove(&(block_id, position));
+        }
     }
     let mut update_new_proofs = Vec::new();
     update_new_proofs.push(1);
