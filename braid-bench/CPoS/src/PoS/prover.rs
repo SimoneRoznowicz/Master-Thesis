@@ -2,8 +2,6 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::time::{Instant, Duration};
-
-
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::{Sender, TryRecvError};
@@ -13,15 +11,15 @@ use std::thread::{self, sleep};
 use log::{debug, error, info, trace, warn};
 
 use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE};
-use crate::block_generation::encoder::generate_block_group;
+use crate::block_generation::encoder::{generate_block_group, encode};
 use crate::block_generation::utils::Utils::{
     BATCH_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,
-    NUM_BYTES_IN_BLOCK, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION,
+    NUM_BYTES_IN_BLOCK, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, BUFFER_DATA_SIZE,
 };
 use crate::communication::client::send_msg;
-use crate::communication::handle_prover::random_path_generator1;
+use crate::communication::handle_prover::random_path_generator;
 use crate::communication::structs::Notification;
-use crate::Merkle_Tree::structs::{Direction, Proof_Mod, Sibling_Mod};
+use crate::Merkle_Tree::structs::{Direction, Proof, Sibling};
 
 use super::structs::NotifyNode;
 use super::utils::from_proof_to_bytes;
@@ -29,28 +27,26 @@ use super::utils::from_proof_to_bytes;
 #[derive(Debug)]
 pub struct Prover {
     address: String,
-    verifier_address: String,
     stream_opt: Option<TcpStream>,
-    //unit: Vec<FragmentGroup>,   //PROVVISORIO: POI VOGLIO AVERE SOLO UN FILE
     seed: u8,
     iteration: u32,
     shared_file: Arc<Mutex<File>>,
 }
 
 impl Prover {
-    pub fn start(address: String, prover_address: String) {
+    pub fn start(address: String) {
         //channel to allow the verifier threads communicate with the main thread
         let sender: Sender<NotifyNode>;
         let receiver: Receiver<NotifyNode>;
         (sender, receiver) = channel();
 
-        let mut verifier = Prover::new(address, prover_address, sender);
+        let mut verifier = Prover::new(address, sender);
 
         info!("Prover starting main_handler()");
         verifier.main_handler(&receiver);
     }
 
-    pub fn new(address: String, verifier_address: String, sender: Sender<NotifyNode>) -> Prover {
+    pub fn new(address: String, sender: Sender<NotifyNode>) -> Prover {
         debug!("beginning of new Prover");
         let unit: Vec<FragmentGroup> = Vec::new();
 
@@ -62,6 +58,33 @@ impl Prover {
                 eprintln!("Error removing file: {:?}", err);
             }
         }
+        match fs::remove_file("output-img") {
+            Ok(()) => {
+                println!("File removed successfully.");
+            }
+            Err(err) => {
+                eprintln!("Error removing file: {:?}", err);
+            }
+        }
+        let mut input_file = File::open("test2-img.mp4").unwrap();
+        let mut output_file = File::create("output2-img.bin").unwrap();
+        match encode(input_file.try_clone().unwrap(), output_file.try_clone().unwrap()) {
+            Ok(_) => {info!("Correctly encoded")},
+            Err(e) => {error!("Error while encoding: {:?}",e)},
+        };
+        let metadata = input_file.metadata();
+        debug!("input-img len = {}", metadata.unwrap().len());
+        //debug!("input-img len == {:?}", metadata.unwrap().len()%NUM_BYTES_IN_BLOCK as u64);
+
+        let output_lenght = output_file.seek(SeekFrom::End(0));
+        let input_lenght = input_file.seek(SeekFrom::End(0));
+
+        debug!("input-img len == {:?}", input_lenght);
+        debug!("input-img len == {:?}", input_lenght.unwrap()%NUM_BYTES_IN_BLOCK as u64);
+
+        debug!("Output-img len == {:?}", output_lenght);
+        debug!("Output-img len == {:?}", output_lenght.unwrap()%NUM_BYTES_IN_BLOCK as u64);
+
 
         let new_file = OpenOptions::new()
             .create(true)
@@ -119,7 +142,6 @@ impl Prover {
         let stream: Option<TcpStream> = None;
         let mut this = Self {
             address,
-            verifier_address,
             stream_opt: stream,
             seed: 0, //default value
             iteration: 0,
@@ -141,7 +163,7 @@ impl Prover {
             loop {
                 let sender_clone = sender.clone();
                 let mut stream_clone = stream.try_clone().unwrap();
-                let mut data = [0; 500]; // Use a smaller buffer size
+                let mut data = [0; BUFFER_DATA_SIZE]; // Use a smaller buffer size
                 let retrieved_data = handle_stream(&mut stream_clone, &mut data);
                 handle_message(retrieved_data, sender_clone);
             }
@@ -272,7 +294,7 @@ pub fn generate_proof_array(
     shared_file: &Arc<Mutex<File>>,
     block_id: u32,
     position: u32,
-) -> (Proof_Mod, [u8; 32], [u8; 32]) {
+) -> (Proof, [u8; 32], [u8; 32]) {
     let mut buffer: [u8; NUM_BYTES_IN_BLOCK as usize] = [0; NUM_BYTES_IN_BLOCK as usize];
 
     read_block_from_file(shared_file, block_id, &mut buffer);
@@ -410,7 +432,7 @@ pub fn generate_proof_array(
             sibling_fragment = *blake3::hash(&sibling_fragment).as_bytes();
             //debug!("Sibling_fragment hash == {:?}",sibling_fragment);
         }
-        siblings.push(Sibling_Mod::new(
+        siblings.push(Sibling::new(
             blake3::Hash::from_bytes(sibling_fragment),
             direction_sibling,
         ));
@@ -435,7 +457,7 @@ pub fn generate_proof_array(
     );
     debug!("Siblings length == {:?}", siblings.len());
 
-    return (Proof_Mod::new(siblings), self_fragment, root_hash);
+    return (Proof::new(siblings), self_fragment, root_hash);
 
     //                    A
     //            A               a             is index % 2 == 0 --> No then take sibling on the R
@@ -474,7 +496,7 @@ pub fn create_and_send_proof_batches(
     debug!("Initial random seed == {}", seed);
     let init_iteration = iteration;
     while iteration < init_iteration + proof_batch.len() as u32 {
-        (block_id, position, seed) = random_path_generator1(seed, iteration as u8);
+        (block_id, position, seed) = random_path_generator(seed, iteration as u8);
 
         proof_batch[(iteration - init_iteration) as usize] =
             read_byte_from_file(file, block_id, position);

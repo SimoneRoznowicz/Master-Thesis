@@ -5,35 +5,13 @@ use std::{
 
 use crate::{
     block_generation::utils::Utils::FRAGMENT_SIZE,
-    Merkle_Tree::{node_generic::*, structs::*},
+    Merkle_Tree::structs::*,
 };
-use log::{debug, error, info};
-use serde::Serialize;
-use serde_json::error;
+use log::{debug, error, info, warn};
 use talk::crypto::primitives::hash::{hash, Hash};
 
-/// Returns the Hash of the root, computed according to the given proof.
-pub fn get_root_hash<T, K>(proof: Proof, my_transactions: T, id: Id<K>) -> Hash
-where
-    T: Serialize + Clone,
-    K: Serialize + Eq + Clone,
-{
-    let siblings = proof.get_siblings();
-    let my_leaf = Leaf::<K, T>::new(id.get_key().clone(), my_transactions);
-
-    let mut hash_final = my_leaf.get_hash();
-
-    for sibling in siblings {
-        match sibling.get_direction() {
-            Direction::Left => hash_final = hash(&(sibling.get_hash(), hash_final)).unwrap(),
-            Direction::Right => hash_final = hash(&(hash_final, sibling.get_hash())).unwrap(),
-        }
-    }
-    hash_final
-}
-
-pub fn get_root_hash_mod(
-    proof: &Proof_Mod,
+pub fn get_root_hash(
+    proof: &Proof,
     key: (u32, u32),
     shared_map: &Arc<Mutex<HashMap<(u32, u32), u8>>>,
     mut self_fragment: [u8; FRAGMENT_SIZE],
@@ -42,19 +20,20 @@ pub fn get_root_hash_mod(
     let position = key.1;
 
     let indx_byte_in_self_fragment = position % FRAGMENT_SIZE as u32;
-    let siblings: &Vec<Sibling_Mod> = proof.get_siblings();
+    let siblings: &Vec<Sibling> = proof.get_siblings();
 
     {
-        match shared_map
-            .lock()
-            .unwrap()
-            .get(&(block_id.clone(), position.clone()))
+        let map = shared_map.lock().unwrap();
+        match map.get(&(block_id.clone(), position.clone()))
         {
             Some(value) => {
                 self_fragment[indx_byte_in_self_fragment as usize] = *value;
+                warn!("Check this inclusion proof with my innput value. block_id == {} and position {} Map == {:?}", block_id, position, map);
+
             }
             None => {
-                error!("Do not check this inclusion proof with my innput value");
+                error!("Do not check this inclusion proof with my innput value. block_id == {} and position {} Map == {:?}", block_id, position, map);
+                //print map current
             }
         };
     }

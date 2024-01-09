@@ -7,6 +7,8 @@ pub mod Utils {
     */
     // position in the block is u32 type
 
+    pub const BUFFER_DATA_SIZE: usize = 10000;
+
     pub const NUM_BYTES_IN_BLOCK: u32 = 524288; // 2^19 bytes
     pub static NUM_BYTES_IN_BLOCK_GROUP: u32 = 2097152; // 2^21 bytes
     pub static NUM_FRAGMENTS_PER_UNIT: u32 = 1000;
@@ -22,8 +24,9 @@ pub mod Utils {
     pub const HASH_BYTES_LEN: usize = 32;
     pub const FRAGMENT_SIZE: usize = 32;
 
-    pub const BATCH_SIZE: usize = 10; //Indicates the batch size of proofs that should be sent to the verifier at every
-                                      // Lowest accepted percentage of blocks not stored by the prover. If the verifier detects that the prover
-                                      // didn't store at least LOWEST_ACCEPTED_STORING_PERCENTAGE of blocks, the timeout is exceeded and the challenge is not passed.
+    pub const BATCH_SIZE: usize = 50; //Indicates the batch size of proofs that should be sent to the verifier at every
+
+    // Lowest accepted percentage of blocks not stored by the prover. If the verifier detects that the prover
+    // didn't store at least LOWEST_ACCEPTED_STORING_PERCENTAGE of blocks, the timeout is exceeded and the challenge is not passed.
     pub const LOWEST_ACCEPTED_STORING_PERCENTAGE: f32 = 0.9;
 }

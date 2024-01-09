@@ -1,11 +1,10 @@
 use crate::{
     block_generation::utils::Utils::HASH_BYTES_LEN,
-    Merkle_Tree::structs::{Direction, Proof_Mod, Sibling_Mod},
+    Merkle_Tree::structs::{Direction, Proof, Sibling},
 };
-use log::debug;
 
 // Helper function to convert the Proof struct into a vector of bytes
-pub fn from_proof_to_bytes<'a>(proof: Proof_Mod, vec: &mut Vec<u8>) /*-> &'a Vec<u8>*/
+pub fn from_proof_to_bytes<'a>(proof: Proof, vec: &mut Vec<u8>) /*-> &'a Vec<u8>*/
 {
     //[tag, direction, 32_hash_bytes..., direction, 32_hash_bytes,...]
 
@@ -21,9 +20,9 @@ pub fn from_proof_to_bytes<'a>(proof: Proof_Mod, vec: &mut Vec<u8>) /*-> &'a Vec
 }
 
 /// Helper function to convert a vector of into the Proof structs
-pub fn from_bytes_to_proof(vec: Vec<u8>) -> Proof_Mod {
+pub fn from_bytes_to_proof(vec: Vec<u8>) -> Proof {
     //[direction, 32_hash_bytes..., direction, 32_hash_bytes,...]
-    let mut siblings: Vec<Sibling_Mod> = Vec::new();
+    let mut siblings: Vec<Sibling> = Vec::new();
     let _len_hash = 32;
     let mut i = 0;
 
@@ -38,9 +37,9 @@ pub fn from_bytes_to_proof(vec: Vec<u8>) -> Proof_Mod {
         hash_bytes.copy_from_slice(&vec[i + 1..i + 1 + HASH_BYTES_LEN]);
 
         let hash = blake3::Hash::from_bytes(hash_bytes);
-        let sibling = Sibling_Mod::new(hash, direction);
+        let sibling = Sibling::new(hash, direction);
         siblings.push(sibling);
         i += HASH_BYTES_LEN + 1;
     }
-    return Proof_Mod::new(siblings);
+    return Proof::new(siblings);
 }

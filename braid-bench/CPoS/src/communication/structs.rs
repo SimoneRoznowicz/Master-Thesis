@@ -1,3 +1,18 @@
+#[derive(Debug, Clone)]
+pub struct NotifyNode {
+    pub buff: Vec<u8>,
+    pub notification: Notification,
+}
+
+impl NotifyNode {
+    pub fn new(buff: Vec<u8>, variant: Notification) -> NotifyNode {
+        NotifyNode {
+            buff,
+            notification: variant, // Replace with your actual variant
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum Notification {
     Start,
@@ -25,7 +40,7 @@ pub enum Fairness {
 
 #[derive(Debug, Clone)]
 pub enum Failure_Reason {
-    Time,
+    Timeout,
     Correctness,
 }
 
