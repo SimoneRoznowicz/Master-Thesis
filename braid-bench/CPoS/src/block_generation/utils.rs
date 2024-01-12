@@ -10,7 +10,7 @@ pub mod Utils {
     pub const BUFFER_DATA_SIZE: usize = 10000;
 
     pub const NUM_BYTES_IN_BLOCK: u32 = 524288; // 2^19 bytes
-    pub static NUM_BYTES_IN_BLOCK_GROUP: u32 = 2097152; // 2^21 bytes
+    pub const NUM_BYTES_IN_BLOCK_GROUP: u32 = 2097152; // 2^21 bytes
     pub static NUM_FRAGMENTS_PER_UNIT: u32 = 1000;
     pub static NUM_BLOCK_GROUPS_PER_UNIT: u64 = 5;
     pub static NUM_BLOCKS_PER_UNIT: usize = NUM_BLOCK_GROUPS_PER_UNIT as usize * GROUP_SIZE;

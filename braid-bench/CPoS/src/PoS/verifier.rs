@@ -28,13 +28,13 @@ use crate::{
         client::send_msg,
         handle_prover::random_path_generator,
         structs::{
-            Failure_Reason, Fairness, Notification, Time_Verification_Status, Verification_Status,
+            Failure_Reason, Fairness, Notification, Time_Verification_Status, Verification_Status, NotifyNode,
         },
     },
     Merkle_Tree::client_verify::get_root_hash,
 };
 
-use super::{structs::NotifyNode, utils::from_bytes_to_proof};
+use super::utils::from_bytes_to_proof;
 
 pub struct Verifier {
     prover_address: String,

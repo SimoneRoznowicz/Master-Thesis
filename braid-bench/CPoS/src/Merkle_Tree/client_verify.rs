@@ -33,7 +33,6 @@ pub fn get_root_hash(
             }
             None => {
                 error!("Do not check this inclusion proof with my innput value. block_id == {} and position {} Map == {:?}", block_id, position, map);
-                //print map current
             }
         };
     }

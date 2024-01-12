@@ -1,4 +1,4 @@
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File, OpenOptions, Permissions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::time::{Instant, Duration};
@@ -10,18 +10,18 @@ use std::thread::{self, sleep};
 
 use log::{debug, error, info, trace, warn};
 
-use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE};
+use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE, GROUP_BYTE_SIZE};
+use crate::block_generation::decoder::decode;
 use crate::block_generation::encoder::{generate_block_group, encode};
 use crate::block_generation::utils::Utils::{
     BATCH_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,
-    NUM_BYTES_IN_BLOCK, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, BUFFER_DATA_SIZE,
+    NUM_BYTES_IN_BLOCK, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, BUFFER_DATA_SIZE, NUM_BYTES_IN_BLOCK_GROUP,
 };
 use crate::communication::client::send_msg;
 use crate::communication::handle_prover::random_path_generator;
-use crate::communication::structs::Notification;
+use crate::communication::structs::{Notification, NotifyNode};
 use crate::Merkle_Tree::structs::{Direction, Proof, Sibling};
 
-use super::structs::NotifyNode;
 use super::utils::from_proof_to_bytes;
 
 #[derive(Debug)]
@@ -50,40 +50,74 @@ impl Prover {
         debug!("beginning of new Prover");
         let unit: Vec<FragmentGroup> = Vec::new();
 
-        match fs::remove_file("test_main.bin") {
-            Ok(()) => {
-                println!("File removed successfully.");
-            }
-            Err(err) => {
-                eprintln!("Error removing file: {:?}", err);
-            }
-        }
-        match fs::remove_file("output-img") {
-            Ok(()) => {
-                println!("File removed successfully.");
-            }
-            Err(err) => {
-                eprintln!("Error removing file: {:?}", err);
+        let mut files_to_remove = vec!["test_main.bin","output.txt","output.bin","reconstructed.mp4"];
+        for file_path in files_to_remove {
+            match fs::remove_file(file_path) {
+                Ok(()) => {
+                    println!("File {} removed successfully.", file_path);
+                }
+                Err(err) => {
+                    eprintln!("Error removing file {}: {:?}", file_path, err);
+                }
             }
         }
-        let mut input_file = File::open("test2-img.mp4").unwrap();
-        let mut output_file = File::create("output2-img.bin").unwrap();
-        match encode(input_file.try_clone().unwrap(), output_file.try_clone().unwrap()) {
+
+        let mut input_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("input.mp4").unwrap();
+
+        let mut output_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .read(true)
+            .open("output.bin").unwrap();
+        let mut reconstructed_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("reconstructed.mp4").unwrap();
+
+        match encode(input_file.try_clone().unwrap(), &output_file) {
             Ok(_) => {info!("Correctly encoded")},
             Err(e) => {error!("Error while encoding: {:?}",e)},
         };
+
+        match decode(output_file, reconstructed_file) {
+            Ok(_) => {info!("Correctly decoded")},
+            Err(e) => {error!("Error while decoding: {:?}",e)},
+        };
+
         let metadata = input_file.metadata();
         debug!("input-img len = {}", metadata.unwrap().len());
-        //debug!("input-img len == {:?}", metadata.unwrap().len()%NUM_BYTES_IN_BLOCK as u64);
 
-        let output_lenght = output_file.seek(SeekFrom::End(0));
         let input_lenght = input_file.seek(SeekFrom::End(0));
 
-        debug!("input-img len == {:?}", input_lenght);
-        debug!("input-img len == {:?}", input_lenght.unwrap()%NUM_BYTES_IN_BLOCK as u64);
+        debug!("input-img  == {:?}", input_lenght);
+        //debug!("Output-img == {:?}", output_lenght);
+        //debug!("Output-img remaining == {:?}", output_lenght.unwrap()%NUM_BYTES_IN_BLOCK as u64);
 
-        debug!("Output-img len == {:?}", output_lenght);
-        debug!("Output-img len == {:?}", output_lenght.unwrap()%NUM_BYTES_IN_BLOCK as u64);
+
+
+
+
+
+        //QUIIII
+
+        input_file.seek(SeekFrom::Start(0));
+        let mut buffer_block = vec![0u8; GROUP_BYTE_SIZE];
+        match input_file.read_exact(&mut buffer_block) {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Error reading file == {:?}", e)
+            }
+        };
+        let input_hash = blake3::hash(&buffer_block);
+        debug!("input_hash == {:?}", input_hash.as_bytes());
+
+
+
+
+
 
 
         let new_file = OpenOptions::new()

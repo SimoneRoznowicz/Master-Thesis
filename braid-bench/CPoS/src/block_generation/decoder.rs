@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::prelude::*;
 use std::io::{Read, SeekFrom};
@@ -8,6 +8,7 @@ use std::time::Instant;
 use aes::cipher::{generic_array::GenericArray, BlockDecryptMut, KeyIvInit};
 use aes::Aes128;
 use blake3;
+use log::debug;
 
 use crate::block_generation::blockgen::{
     block_gen, InitGroup, GROUP_BYTE_SIZE, GROUP_SIZE, INIT_SIZE, N,
@@ -30,8 +31,13 @@ pub fn decode(mut input_file: File, mut output_file: File) -> io::Result<()> {
     let output_lenght = u64::from_le_bytes(size_bytes);
     let block_count = ((output_lenght - 1) / GROUP_BYTE_SIZE as u64) + 1;
     assert!(input_lenght == 8 + (64 * block_count) + block_count * GROUP_BYTE_SIZE as u64);
-
-    output_file.set_len(output_lenght)?;
+    //output_file.set_len(output_lenght)?;
+    // drop(output_file);
+    // let mut output_file = OpenOptions::new()
+    //     .append(true)
+    //     .write(true)
+    //     .open("reconstructed.mp4").unwrap();
+    output_file.seek(SeekFrom::Start(0))?;
 
     // Write blocks
     for i in 0..block_count {
