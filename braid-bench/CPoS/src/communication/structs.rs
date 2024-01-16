@@ -18,10 +18,12 @@ pub enum Notification {
     Start,
     Stop,
     Update,
+    Collect_Block_Hashes,
     Verification_Time,
     Verification_Correctness,
     Create_Inclusion_Proofs,
     Handle_Inclusion_Proof,
+    Handle_Prover_commitment,
     Terminate,
 }
 

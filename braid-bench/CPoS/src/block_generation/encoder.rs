@@ -39,7 +39,7 @@ pub fn encode(mut input_file: File, mut output_file: &File) -> io::Result<()> {
     error!("Remianing: output_length % block_length == {}", output_lenght%NUM_BYTES_IN_BLOCK as u64);
 
 
-        let mut file3 =OpenOptions::new()
+        let mut file3 = OpenOptions::new()
         .create(true)
         .append(true)
         .read(true)
@@ -48,10 +48,11 @@ pub fn encode(mut input_file: File, mut output_file: &File) -> io::Result<()> {
         .unwrap();
     // Output file made of (in order):
 
-    // 64 bytes file size
+    // QUESTO CONTA PER LA COMPOSIZIONE DEL FILE OUTPUT:
+    // 8 bytes file size
     // for block (blockgroup) in blocks
-    //      - 32 byte hash
-    //      - NUM_BYTES_IN_BLOCK_GROUP bytes of data of the block
+    //      - 32 byte: hash of a block of data contained in the input
+    //      - NUM_BYTES_IN_BLOCK_GROUP bytes of XORed data + CPoS of the block
 
 
     // 64 bytes for each block
@@ -85,7 +86,7 @@ pub fn encode(mut input_file: File, mut output_file: &File) -> io::Result<()> {
             let block_hash = block_hash.as_bytes();
             for i in 0..INIT_SIZE {
                 let mut hash_bytes = [0u8; 8];
-                for j in 0..8 {
+                for j in 0..8 {                             
                     hash_bytes[j] = block_hash[i * 8 + j]
                 }
                 inits[i][g] = u64::from_le_bytes(hash_bytes);
@@ -97,7 +98,7 @@ pub fn encode(mut input_file: File, mut output_file: &File) -> io::Result<()> {
 
         // Compute input hash
         let mut output: Vec<u8> = Vec::with_capacity(32 + GROUP_BYTE_SIZE);
-        let input_hash = blake3::hash(&input);
+        let input_hash = blake3::hash(&input);  //compute input hash with the merkle tree
         let input_hash = input_hash.as_bytes();
         debug!("input hash of blockgroup number {} is {:?}", i,input_hash);
 

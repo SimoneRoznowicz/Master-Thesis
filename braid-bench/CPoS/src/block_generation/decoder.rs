@@ -18,7 +18,7 @@ type Aes128Cbc = cbc::Decryptor<Aes128>;
 
 const ID_PUBLIC_KEY: &[u8] = b"727 is a funny number";
 
-pub fn decode(mut input_file: File, mut output_file: File) -> io::Result<()> {
+pub fn decode(mut input_file: &File, mut output_file: File) -> io::Result<()> {
     let startup = Instant::now();
 
     let pub_hash = blake3::hash(ID_PUBLIC_KEY);

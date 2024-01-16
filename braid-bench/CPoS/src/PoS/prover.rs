@@ -9,8 +9,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, sleep};
 
 use log::{debug, error, info, trace, warn};
+use rand::seq::index;
 
-use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE, GROUP_BYTE_SIZE};
+use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE, GROUP_BYTE_SIZE, BLOCK_BYTE_SIZE};
 use crate::block_generation::decoder::decode;
 use crate::block_generation::encoder::{generate_block_group, encode};
 use crate::block_generation::utils::Utils::{
@@ -82,7 +83,7 @@ impl Prover {
             Err(e) => {error!("Error while encoding: {:?}",e)},
         };
 
-        match decode(output_file, reconstructed_file) {
+        match decode(&output_file, reconstructed_file) {
             Ok(_) => {info!("Correctly decoded")},
             Err(e) => {error!("Error while decoding: {:?}",e)},
         };
@@ -104,21 +105,25 @@ impl Prover {
         //QUIIII
 
         input_file.seek(SeekFrom::Start(0));
-        let mut buffer_block = vec![0u8; GROUP_BYTE_SIZE];
-        match input_file.read_exact(&mut buffer_block) {
+        let mut input_buf = vec![0u8; GROUP_BYTE_SIZE];
+        match input_file.read_exact(&mut input_buf) {
             Ok(_) => {}
             Err(e) => {
                 error!("Error reading file == {:?}", e)
             }
         };
-        let input_hash = blake3::hash(&buffer_block);
+        let input_hash = blake3::hash(&input_buf);
         debug!("input_hash == {:?}", input_hash.as_bytes());
 
-
-
-
-
-
+        output_file.seek(SeekFrom::Start(8));
+        let mut output_buf = vec![0u8; 32];
+        match output_file.read_exact(&mut output_buf) {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Error reading file == {:?}", e)
+            }
+        };
+        debug!("output_hash_taken == {:?}",output_buf);
 
         let new_file = OpenOptions::new()
             .create(true)
@@ -136,42 +141,46 @@ impl Prover {
         //     .unwrap();
 
         let mut time_block_creation: Vec<u128> = Vec::new();
-        let shared_file = Arc::new(Mutex::new(new_file));
-        {
-            //File of total length (2^21)*(NUM_BLOCK_GROUPS_PER_UNIT)
-            let mut file = shared_file.lock().unwrap();
-            for i in 0..NUM_BLOCK_GROUPS_PER_UNIT {
-                let start_time = Instant::now();
-                let block_group = generate_block_group(i);
-                let end_time = Instant::now();
-                time_block_creation.push(end_time.duration_since(start_time).as_micros());
-                debug!("time {:?}", (end_time-start_time).as_micros());
-                debug!("time {:?}", (end_time-start_time).as_millis());
+        let shared_file = Arc::new(Mutex::new(input_file));
+        // {
+        //     //File of total length (2^21)*(NUM_BLOCK_GROUPS_PER_UNIT)
+        //     let mut file = shared_file.lock().unwrap();
+        //     for i in 0..NUM_BLOCK_GROUPS_PER_UNIT {
+        //         let start_time = Instant::now();
+        //         let block_group = generate_block_group(i);
+        //         let end_time = Instant::now();
+        //         time_block_creation.push(end_time.duration_since(start_time).as_micros());
+        //         debug!("time {:?}", (end_time-start_time).as_micros());
+        //         debug!("time {:?}", (end_time-start_time).as_millis());
 
-                debug!("4 Blocks generated");
-                // let _cc: u64 = 0;
-                for i in 0..GROUP_SIZE {
-                    debug!("Group Size iteration i == {}", i);
-                    for j in 0..block_group.len() {
-                        let byte_fragment = block_group[j][i].to_le_bytes();
-                        file.write_all(&byte_fragment).unwrap();
-                        // for b in byte_fragment{
-                        //     if (cc % 20 == 0){
-                        //         let ccstr = cc.to_string()+ "* ";
-                        //         file2.write(ccstr.as_bytes());
-                        //     }
-                        //     let bstr = b.to_string() + " ";
-                        //     file2.write(bstr.as_bytes());
-                        //     cc += 1;
-                        // }
-                    }
-                }
-            }
-        }
+        //         debug!("4 Blocks generated");
+
+        //         // let _cc: u64 = 0;
+
+        //         // stampa i blocks uno dietro l'altro, non interpolati fra loro
+        //         for i in 0..GROUP_SIZE {
+        //             debug!("Group Size iteration i == {}", i);
+        //             for j in 0..block_group.len() {
+        //                 let byte_fragment = block_group[j][i].to_le_bytes();
+        //                 file.write_all(&byte_fragment).unwrap();
+        //                 // for b in byte_fragment {
+        //                 //     if (cc % 20 == 0){
+        //                 //         let ccstr = cc.to_string()+ "* ";
+        //                 //         file2.write(ccstr.as_bytes());
+        //                 //     }
+        //                 //     let bstr = b.to_string() + " ";
+        //                 //     file2.write(bstr.as_bytes());
+        //                 //     cc += 1;
+        //                 // }
+        //             }
+        //         }
+        //     }
+        // }
+        
         let sum_time_blocks_creation: u128 = time_block_creation.iter().sum();
         debug!("Average time passed for 4 blocks creation is {:?}", sum_time_blocks_creation as f64/(1000.0*time_block_creation.len() as f64));
-        let mut encoded: Vec<u8> = bincode::serialize(&unit).unwrap();
-        let _enc_slice: &[u8] = encoded.as_mut_slice();
+        // let mut encoded: Vec<u8> = bincode::serialize(&unit).unwrap();
+        // let _enc_slice: &[u8] = encoded.as_mut_slice();
 
         let stream: Option<TcpStream> = None;
         let mut this = Self {
@@ -210,11 +219,14 @@ impl Prover {
         loop {
             match receiver.try_recv() {
                 Ok(notify_node) => match notify_node.notification {
+                    Notification::Collect_Block_Hashes => {
+                        self.commit_to_data();
+                    }
                     Notification::Start => {
                         is_started = true;
                         info!("Start Notification received");
                         self.seed = notify_node.buff[1];
-                        info!("buff AT THE START == {:?}", notify_node.buff);
+                        //info!("buff AT THE START == {:?}", notify_node.buff);
 
                         (self.seed, self.iteration) = create_and_send_proof_batches(
                             &self.stream_opt,
@@ -256,6 +268,22 @@ impl Prover {
             }
         }
         info!("ARRIVED AT END OF LOOP");
+    }
+
+    pub fn commit_to_data(&mut self) {
+        //save all hashes in 1 vector. Send the vector
+        let mut offset_start_hash: usize = 8;  //first 8 bytes are the hash of the whole input file
+        let mut data_block_hashes = vec![8];  //tag 8 == receiving block hashes
+        let metadata;
+        {
+            metadata = self.shared_file.lock().unwrap().metadata();
+        }
+        let file_len = metadata.unwrap().len();
+        while offset_start_hash < file_len as usize{
+            data_block_hashes.extend(read_hashes_from_file(&self.shared_file, offset_start_hash as u64));
+            offset_start_hash += HASH_BYTES_LEN + BLOCK_BYTE_SIZE*4
+        }
+        send_msg(&self.stream_opt.as_ref().unwrap(), &data_block_hashes);
     }
 
     pub fn create_inclusion_proofs(&mut self, msg: &[u8]) {
@@ -551,6 +579,7 @@ pub fn create_and_send_proof_batches(
     debug!("Before send_msg_prover");
     send_msg(stream.as_ref().unwrap(), &response_msg);
     debug!("Batch of proofs sent from prover to verifier");
+
     return (seed, iteration);
 }
 
@@ -590,30 +619,20 @@ pub fn send_create_inclusion_proofs(msg: &[u8], sender: &Sender<NotifyNode>) {
     };
 }
 
-pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
-    if !msg.is_empty() {
-        let tag = msg[0];
-        debug!("msg == {}", msg[0]);
-        if tag == 0 {
-            //Notify the main thread to start creating proof
-            trace!("In prover the tag is 0");
-            send_start_notification(msg, &sender);
-        } else if tag == 2 {
-            //Notify the main thread to stop creating proofs
-            trace!("In prover the tag is 2");
-            send_stop_notification(&sender);
-        } else if tag == 3 {
-            //Notify the main thread to start creating inclusion proofs
-            trace!("In prover the tag is 3");
-            send_create_inclusion_proofs(msg, &sender);
-        } else {
-            error!("In prover the tag is NOT 0 and NOT 2: the tag is {}", tag)
+pub fn send_collect_block_hashes(sender: &Sender<NotifyNode>) {
+    match sender.send(NotifyNode {
+        buff: Vec::new(),
+        notification: Notification::Collect_Block_Hashes,
+    }) {
+        Ok(_) => {}
+        Err(_) => {
+            warn!("This Collect_Block_Hashes Notification was not received")
         }
-    }
+    };
 }
 
-pub fn read_byte_from_file(shared_file: &Arc<Mutex<File>>, block_id: u32, position: u32) -> u8 {
-    let mut file = shared_file.lock().unwrap();
+pub fn read_byte_from_file(shared_input_file: &Arc<Mutex<File>>, block_id: u32, position: u32) -> u8 {
+    let mut file = shared_input_file.lock().unwrap();
     let index = (block_id * NUM_BYTES_IN_BLOCK) as u64 + position as u64;
 
     let _metadata = file.metadata();
@@ -656,4 +675,46 @@ pub fn read_block_from_file(
     };
 
     return buffer.to_vec();
+}
+
+pub fn read_hashes_from_file(shared_file: &Arc<Mutex<File>>, indx: u64) -> [u8;HASH_BYTES_LEN] {
+    let mut file = shared_file.lock().unwrap();
+
+    file.seek(SeekFrom::Start(indx)).unwrap();
+
+    let mut buffer = [0; HASH_BYTES_LEN];
+    match file.read_exact(&mut buffer) {
+        Ok(_) => {}
+        Err(e) => {
+            error!("Error reading file: == {:?}", e)
+        }
+    };
+    return buffer;
+}
+
+pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
+    if !msg.is_empty() {
+        let tag = msg[0];
+        debug!("msg == {}", msg[0]);
+        if tag == 0 {
+            //Notify the main thread to start creating proof
+            trace!("In prover the tag is 0");
+            send_start_notification(msg, &sender);
+        } else if tag == 2 {
+            //Notify the main thread to stop creating proofs
+            trace!("In prover the tag is 2");
+            send_stop_notification(&sender);
+        } else if tag == 3 {
+            //Notify the main thread to start creating inclusion proofs
+            trace!("In prover the tag is 3");
+            send_create_inclusion_proofs(msg, &sender);
+        } else if tag == 7 {
+            //Notify the main thread to start creating inclusion proofs
+            trace!("In prover the tag is 7");
+            send_collect_block_hashes(&sender);
+        }
+        else {
+            error!("In prover the tag is NOT 0 and NOT 2: the tag is {}", tag)
+        }
+    }
 }

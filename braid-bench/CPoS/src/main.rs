@@ -146,6 +146,22 @@ fn main() {
         hasherr.update(&vec1);
         hasherr.update(&vec2);
         println!("FINALIZED r == {:?}", hasherr.finalize().as_bytes());
+
+        let rr1 = vec![1, 2];
+        let rr2 = vec![3, 4];
+        let rrtot = vec![1, 2, 3, 4];
+
+        let hrr1 = blake3::hash(&rr1);
+        let hrr2 = blake3::hash(&rr2);
+        let mut hasherr = blake3::Hasher::new();
+        hasherr.update(hrr1.as_bytes());
+        hasherr.update(hrr2.as_bytes());
+        let hrr1hrr2 = hasherr.finalize();
+
+        let hrrtot = blake3::hash(&rrtot);
+
+        println!("rrtot in one shot == {:?},in more hashes == {:?}", hrrtot.as_bytes(), hrr1hrr2.as_bytes());
+
     } else {
         // let target = Box::new(File::create("log.txt").expect("Can't create file"));
 

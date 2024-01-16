@@ -122,11 +122,18 @@ impl Verifier {
     }
 
     fn main_handler(&mut self, receiver: &Receiver<NotifyNode>, sender: &Sender<NotifyNode>) {
+        let mut is_commitment_needed = true;
+        let mut is_ready = false;
         let mut is_to_challenge = true;
         let mut is_to_verify = true;
         let is_stopped = false;
         loop {
-            if is_to_challenge {
+            if is_commitment_needed{
+                is_commitment_needed = false;
+                info!("Verifier asks the prover for commitment");
+                self.request_commitment();
+            }
+            if is_to_challenge && is_ready {  //is_ready becomes true when I receive the hashes of the blocks
                 is_to_challenge = false;
                 info!("Verifier prepares the challenge");
                 self.challenge();
@@ -134,6 +141,9 @@ impl Verifier {
             match receiver.recv() {
                 Ok(mut notify_node) => {
                     match notify_node.notification {
+                        Notification::Handle_Prover_commitment => {
+                            
+                        }
                         Notification::Verification_Time => {
                             if is_to_verify {
                                 let stream_clone = self.stream.try_clone().unwrap();
@@ -261,6 +271,21 @@ impl Verifier {
         info!("Challenge sent to the prover...");
     }
 
+    pub fn handle_prover_commitment(&mut self, msg: &[u8]) {
+        let mut curr = 0;
+        while curr < msg.len() {
+            
+        }
+    }
+
+    pub fn request_commitment(&mut self) {
+        let tag: u8 = 7;
+        let msg: [u8; 1] = [tag];
+        //send challenge to prover for the execution
+        send_msg(&mut self.stream, &msg);
+        info!("Request commitment to the prover...");
+    }
+
     //V: Iteration: 0, block_id = 3, position = 195687, value = 192
     //P: Iteration: 0, block_id = 3, position = 195687, value = 192
     //Verify some of the proofs: generate the seed correspondent to all the proofs.
@@ -269,7 +294,7 @@ impl Verifier {
     //update eg.  i = i + (1/3)*10
     //update i = i + (% of samples I want to test) * (length of proof vector)
     fn verify_correctness_proofs(&mut self, msg: &[u8]) -> bool {
-        info!("Starting verify_correctness_proofs ***");
+        info!("Starting verify_correctness_proofs");
         let mut block_id: u32 = INITIAL_BLOCK_ID;
         let mut position: u32 = INITIAL_POSITION;
         let mut block_ids_pos: Vec<(u32, u32)> = vec![];
@@ -277,7 +302,6 @@ impl Verifier {
         for iteration in 0..msg.len() {
             (block_id, position, self.seed) = random_path_generator(self.seed, iteration as u8);
             block_ids_pos.push((block_id, position));
-            //dovrebbe essere una map con key u8 ovvero block_id e value u8 ovvero la position del byte nel block
         }
 
         let _proofs_len = msg.len() as u32;
@@ -319,14 +343,25 @@ impl Verifier {
             // );
             // warn!("Indexxx == {}, msg before check == {:?}", i, msg);
 
-            if !self.check_byte_value(
-                block_ids_pos[i as usize].0,
-                block_ids_pos[i as usize].1,
-                msg[i as usize],
-            ) {
-                warn!("Found incorrect byte value while checking");
-                return false;
-            }
+
+
+            //IMPORTANTE RIMOSSO: in realta' fare questa verifica dopo, nell'inclusion proof verification. 
+            //Qui i byte che salvi sono XORed. Quindi poi nell' incl proof, ricevi anche il data byte. 
+            //A questo punto: 
+            //   • per ogni XORed byte: crea il blocco CPoS corrispondente, seleziona il byte
+            //   • Fai XOR di data byte (dato dal prover) con byte di CPoS e verifica che ottieni esattamente il 
+
+            // if !self.check_byte_value(
+            //     block_ids_pos[i as usize].0,
+            //     block_ids_pos[i as usize].1,
+            //     msg[i as usize],
+            // ) {
+            //     warn!("Found incorrect byte value while checking");
+            //     return false;
+            // }
+
+
+
             //send request Merkle Tree for each of the proof: send tag 3 followed by the indexes (block_ids), followed by the positions
             //e.g. 3,block_id1,position1,blockid2,position2,block_id3,position3...
             debug!(
@@ -571,6 +606,17 @@ fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
             match sender.send(NotifyNode {
                 buff: msg[1..].to_vec(),
                 notification: Notification::Handle_Inclusion_Proof,
+            }) {
+                Ok(_) => {}
+                Err(e) => {
+                    debug!("error first send channel == {}", e)
+                }
+            };
+        } else if tag == 8 {
+            info!("Handle prover's commitment");
+            match sender.send(NotifyNode {
+                buff: msg[1..].to_vec(),
+                notification: Notification::Handle_Prover_commitment,
             }) {
                 Ok(_) => {}
                 Err(e) => {
