@@ -43,7 +43,8 @@ pub struct Verifier {
     proofs: Vec<u8>,
     is_fair: bool,
     is_terminated: bool,
-    shared_mapping_bytes: Arc<Mutex<HashMap<(u32, u32), u8>>>, // k: (block_id,position) v: (byte_value, inclusion_proof_already_verified)
+    shared_mapping_bytes: Arc<Mutex<HashMap<(u32, u32), u8>>>, // k: (block_id,position) v: (byte_value)
+    shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8;HASH_BYTES_LEN]>>>,
     //hash_root: [u8; HASH_LENGTH],
     status: (Verification_Status, Fairness),
     counter: u8,
@@ -71,6 +72,7 @@ impl Verifier {
         seed: u8,
     ) -> Verifier {
         let mut stream_option: Result<TcpStream, std::io::Error>;
+        debug!("V: Arrived beginning new");
         loop {
             stream_option = TcpStream::connect(prover_address.clone());
             match stream_option {
@@ -93,6 +95,9 @@ impl Verifier {
         let mapping_bytes: HashMap<(u32, u32), u8> = HashMap::new();
         let shared_mapping_bytes = Arc::new(Mutex::new(mapping_bytes));
 
+        let blocks_hashes: HashMap<u32, [u8;HASH_BYTES_LEN]> = HashMap::new();
+        let shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8; 32]>>> = Arc::new(Mutex::new(blocks_hashes));
+
         //let hash:[u8; HASH_LENGTH] = Default::default();
         let counter = 0;
         let mut this = Self {
@@ -103,6 +108,7 @@ impl Verifier {
             is_fair,
             is_terminated,
             shared_mapping_bytes,
+            shared_blocks_hashes,
             status,
             counter,
         };
@@ -142,7 +148,8 @@ impl Verifier {
                 Ok(mut notify_node) => {
                     match notify_node.notification {
                         Notification::Handle_Prover_commitment => {
-                            
+                            self.handle_prover_commitment(&notify_node.buff);
+                            is_ready = true;
                         }
                         Notification::Verification_Time => {
                             if is_to_verify {
@@ -273,9 +280,13 @@ impl Verifier {
 
     pub fn handle_prover_commitment(&mut self, msg: &[u8]) {
         let mut curr = 0;
-        while curr < msg.len() {
-            
-        }
+        let mut i = 0;
+        while curr < msg.len() as usize {
+            self.shared_blocks_hashes.lock().unwrap().insert(i, msg[curr..curr+HASH_BYTES_LEN].try_into().unwrap());
+
+            curr += HASH_BYTES_LEN;
+            i+=1;
+        } 
     }
 
     pub fn request_commitment(&mut self) {
@@ -304,7 +315,7 @@ impl Verifier {
             block_ids_pos.push((block_id, position));
         }
 
-        let _proofs_len = msg.len() as u32;
+        // let _proofs_len = msg.len() as u32;
         let mut verfiable_ratio = VERIFIABLE_RATIO;
         if VERIFIABLE_RATIO == 0.0 {
             warn!("VERIFIABLE_RATIO was set to 0: it was reset to 0.5");
@@ -315,7 +326,7 @@ impl Verifier {
         let mut random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
         debug!("Average Step == {} + random Step == {}", avg_step, random_step);
 
-        let mut verified_blocks_and_positions: Vec<u8> = Vec::new();
+        let mut verified_blocks_and_positions: Vec<u8> = vec![3];       //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
         i = (i + ((avg_step + random_step) as i32)).abs();
         random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
 
@@ -325,7 +336,6 @@ impl Verifier {
         );
 
         let mut k = 0;
-        verified_blocks_and_positions.push(3); //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
         while i < msg.len() as i32 {
             {
                 self.shared_mapping_bytes.lock().unwrap().insert(
@@ -344,28 +354,27 @@ impl Verifier {
             // warn!("Indexxx == {}, msg before check == {:?}", i, msg);
 
 
-
             //IMPORTANTE RIMOSSO: in realta' fare questa verifica dopo, nell'inclusion proof verification. 
             //Qui i byte che salvi sono XORed. Quindi poi nell' incl proof, ricevi anche il data byte. 
             //A questo punto: 
             //   • per ogni XORed byte: crea il blocco CPoS corrispondente, seleziona il byte
             //   • Fai XOR di data byte (dato dal prover) con byte di CPoS e verifica che ottieni esattamente il 
 
-            // if !self.check_byte_value(
-            //     block_ids_pos[i as usize].0,
-            //     block_ids_pos[i as usize].1,
-            //     msg[i as usize],
-            // ) {
-            //     warn!("Found incorrect byte value while checking");
-            //     return false;
-            // }
+            if !self.check_byte_value(
+                block_ids_pos[i as usize].0,
+                block_ids_pos[i as usize].1,
+                msg[i as usize],
+            ) {
+                warn!("Found incorrect byte value while checking");
+                return false;
+            }
 
 
 
             //send request Merkle Tree for each of the proof: send tag 3 followed by the indexes (block_ids), followed by the positions
             //e.g. 3,block_id1,position1,blockid2,position2,block_id3,position3...
             debug!(
-                "V: k=={} and block_id == {} and pos == {}",
+                "V: iteration=={} and block_id == {} and pos == {}",
                 k, block_ids_pos[i as usize].0, block_ids_pos[i as usize].1
             );
             let block_id = block_ids_pos[i as usize].0.to_le_bytes();
@@ -389,36 +398,48 @@ impl Verifier {
     //8 / 4  = 2
     //10 % 4 == 2
     fn check_byte_value(&mut self, block_id: u32, pos_in_block: u32, byte_received: u8) -> bool {
-        let block_group: Vec<[u64; GROUP_SIZE]> =
-            generate_block_group((block_id / GROUP_SIZE as u32).try_into().unwrap());
+        // let block_group: Vec<[u64; GROUP_SIZE]> =
+        //     generate_block_group((block_id / GROUP_SIZE as u32).try_into().unwrap());
 
-        let selected_arr: [u64; GROUP_SIZE] = block_group[(pos_in_block / 8) as usize]; //4 cells made of 8 bytes each
+        // let selected_arr: [u64; GROUP_SIZE] = block_group[(pos_in_block / 8) as usize]; //4 cells made of 8 bytes each
 
-        let mut array_u8: [u8; 8 * GROUP_SIZE] = [0; 8 * GROUP_SIZE];
+        // let mut array_u8: [u8; 8 * GROUP_SIZE] = [0; 8 * GROUP_SIZE];
 
-        for (i, &element) in selected_arr.iter().enumerate() {
-            let bytes = element.to_le_bytes();
-            array_u8[i * 8..(i + 1) * 8].copy_from_slice(&bytes);
-        }
+        // for (i, &element) in selected_arr.iter().enumerate() {
+        //     let bytes = element.to_le_bytes();
+        //     array_u8[i * 8..(i + 1) * 8].copy_from_slice(&bytes);
+        // }
 
-        let byte_value =
-            array_u8[(block_id % GROUP_SIZE as u32) as usize * 8 + (pos_in_block % 8) as usize];
+        // let byte_value =
+        //     array_u8[(block_id % GROUP_SIZE as u32) as usize * 8 + (pos_in_block % 8) as usize];
 
-        warn!(
-            "byte_value_real == {} and byte_received == {}",
-            byte_value, byte_received
-        );
-        debug!(
-            "I am printing blockid == {} and position == {}",
-            block_id, pos_in_block
-        );
+        // warn!(
+        //     "byte_value_real == {} and byte_received == {}",
+        //     byte_value, byte_received
+        // );
+        // debug!(
+        //     "I am printing blockid == {} and position == {}",
+        //     block_id, pos_in_block
+        // );
+        // {
+        //     self.shared_mapping_bytes
+        //         .lock()
+        //         .unwrap()
+        //         .insert((block_id, pos_in_block), byte_value);
+        // }
+        // return byte_value == byte_received;
+        // 
+
+
         {
             self.shared_mapping_bytes
                 .lock()
                 .unwrap()
-                .insert((block_id, pos_in_block), byte_value);
+                .insert((block_id, pos_in_block), byte_received);
+            debug!("byte_received ==== {}",byte_received);
         }
-        return byte_value == byte_received;
+
+        return true;
     }
 }
 

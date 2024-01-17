@@ -13,7 +13,7 @@ use log::{debug,error};
 use crate::block_generation::blockgen::{
     block_gen, InitGroup, GROUP_BYTE_SIZE, GROUP_SIZE, INIT_SIZE, N,
 };
-use crate::block_generation::utils::Utils::NUM_BYTES_IN_BLOCK;
+use crate::block_generation::utils::Utils::{NUM_BYTES_IN_BLOCK, NUM_BLOCK_GROUPS_PER_UNIT};
 
 use super::blockgen::BlockGroup;
 type Aes128Cbc = cbc::Encryptor<Aes128>;
@@ -31,6 +31,7 @@ pub fn encode(mut input_file: File, mut output_file: &File) -> io::Result<()> {
     let input_lenght = input_file.seek(SeekFrom::End(0))?;
     input_file.seek(SeekFrom::Start(0))?;
     let block_count = ((input_lenght - 1) / GROUP_BYTE_SIZE as u64) + 1;
+    unsafe { NUM_BLOCK_GROUPS_PER_UNIT = block_count };
     let output_lenght = 8 + (64 * block_count) + block_count * GROUP_BYTE_SIZE as u64;
     output_file.set_len(output_lenght)?;
 

@@ -83,10 +83,10 @@ impl Prover {
             Err(e) => {error!("Error while encoding: {:?}",e)},
         };
 
-        match decode(&output_file, reconstructed_file) {
-            Ok(_) => {info!("Correctly decoded")},
-            Err(e) => {error!("Error while decoding: {:?}",e)},
-        };
+        // match decode(&output_file, reconstructed_file) {
+        //     Ok(_) => {info!("Correctly decoded")},
+        //     Err(e) => {error!("Error while decoding: {:?}",e)},
+        // };
 
         let metadata = input_file.metadata();
         debug!("input-img len = {}", metadata.unwrap().len());
@@ -141,7 +141,7 @@ impl Prover {
         //     .unwrap();
 
         let mut time_block_creation: Vec<u128> = Vec::new();
-        let shared_file = Arc::new(Mutex::new(input_file));
+        let shared_file = Arc::new(Mutex::new(output_file));
         // {
         //     //File of total length (2^21)*(NUM_BLOCK_GROUPS_PER_UNIT)
         //     let mut file = shared_file.lock().unwrap();
@@ -230,7 +230,7 @@ impl Prover {
 
                         (self.seed, self.iteration) = create_and_send_proof_batches(
                             &self.stream_opt,
-                            self.seed, //DEFAULT HASH
+                            self.seed,
                             &receiver,
                             &self.shared_file,
                             self.iteration,
@@ -357,9 +357,12 @@ pub fn generate_proof_array(
     block_id: u32,
     position: u32,
 ) -> (Proof, [u8; 32], [u8; 32]) {
-    let mut buffer: [u8; NUM_BYTES_IN_BLOCK as usize] = [0; NUM_BYTES_IN_BLOCK as usize];
-
+    // let mut buffer: [u8; 2097152 as usize] = [0; 2097152 as usize];
+    let mut buffer = vec![0; NUM_BYTES_IN_BLOCK_GROUP as usize];
+    
+    debug!("buffer len before == {}", buffer.len());
     read_block_from_file(shared_file, block_id, &mut buffer);
+    debug!("buffer len after == {}", buffer.len());
 
     let mut hash_layers: Vec<u8> = buffer.to_vec();
     let mut root_hash: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
@@ -375,6 +378,7 @@ pub fn generate_proof_array(
     //     .write(true)
     //     .open("hash-layers.txt")
     //     .unwrap();
+
     let mut i = 0;
     let _counter = 0;
     while i + HASH_BYTES_LEN < hash_layers.len() {
@@ -633,11 +637,11 @@ pub fn send_collect_block_hashes(sender: &Sender<NotifyNode>) {
 
 pub fn read_byte_from_file(shared_input_file: &Arc<Mutex<File>>, block_id: u32, position: u32) -> u8 {
     let mut file = shared_input_file.lock().unwrap();
-    let index = (block_id * NUM_BYTES_IN_BLOCK) as u64 + position as u64;
+    let index = (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64 + position as u64;
 
-    let _metadata = file.metadata();
-    //debug!("block_id == {} while position == {}", block_id, position);
-    //debug!("index == {} while file is long {}", index, metadata.unwrap().len());
+    let metadata = file.metadata();
+    debug!("block_id == {} while position == {}", block_id, position);
+    debug!("index == {} while file is long {}", index, metadata.unwrap().len());
 
     file.seek(SeekFrom::Start(index)).unwrap();
 
@@ -659,7 +663,7 @@ pub fn read_block_from_file(
     buffer: &mut [u8],
 ) -> Vec<u8> {
     let mut file = shared_file.lock().unwrap();
-    let index = (block_id * NUM_BYTES_IN_BLOCK) as u64;
+    let index = (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64 + 8 + HASH_BYTES_LEN as u64*(block_id+1) as u64;
 
     let _metadata = file.metadata();
     //debug!("block_id == {} while position == {}", block_id, position);
