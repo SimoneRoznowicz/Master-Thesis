@@ -12,8 +12,8 @@ use log::{debug, error, info, trace, warn};
 use rand::seq::index;
 
 use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE, GROUP_BYTE_SIZE, BLOCK_BYTE_SIZE};
-use crate::block_generation::decoder::decode;
-use crate::block_generation::encoder::{generate_block_group, encode};
+use crate::block_generation::decoder::{decode_orig};
+use crate::block_generation::encoder::{generate_block_group, encode_orig};
 use crate::block_generation::utils::Utils::{
     BATCH_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,
     NUM_BYTES_IN_BLOCK, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, BUFFER_DATA_SIZE, NUM_BYTES_IN_BLOCK_GROUP,
@@ -78,16 +78,30 @@ impl Prover {
             .write(true)
             .open("reconstructed.mp4").unwrap();
 
-        match encode(input_file.try_clone().unwrap(), &output_file) {
-            Ok(_) => {info!("Correctly encoded")},
-            Err(e) => {error!("Error while encoding: {:?}",e)},
-        };
 
-        // match decode(&output_file, reconstructed_file) {
+        let mut root_hashes = Vec::new();
+        // match encode(input_file.try_clone().unwrap(), &output_file, &mut root_hashes) {
+        //     Ok(_) => {info!("Correctly encoded")},
+        //     Err(e) => {error!("Error while encoding: {:?}",e)},
+        // };
+
+        // match decode(&output_file, reconstructed_file, &root_hashes) {
         //     Ok(_) => {info!("Correctly decoded")},
         //     Err(e) => {error!("Error while decoding: {:?}",e)},
         // };
 
+        match encode_orig(input_file.try_clone().unwrap(), &output_file, &mut root_hashes) {
+            Ok(_) => {info!("Correctly encoded")},
+            Err(e) => {error!("Error while encoding: {:?}",e)},
+        };
+
+        match decode_orig(&output_file, reconstructed_file, &root_hashes) {
+            Ok(_) => {info!("Correctly decoded")},
+            Err(e) => {error!("Error while decoding: {:?}",e)},
+        };
+
+
+        sleep(Duration::from_secs(5));
         let metadata = input_file.metadata();
         debug!("input-img len = {}", metadata.unwrap().len());
 
@@ -340,7 +354,6 @@ impl Prover {
             msg.extend_from_slice(&self_fragment); //self_fragment
             msg.extend_from_slice(&bytes_proof); //proof
 
-            //19, 271661
             debug!(
                 "Sent incl proof number {} out of {} proofs to be verified",
                 indx,
@@ -361,7 +374,7 @@ pub fn generate_proof_array(
     let mut buffer = vec![0; NUM_BYTES_IN_BLOCK_GROUP as usize];
     
     debug!("buffer len before == {}", buffer.len());
-    read_block_from_file(shared_file, block_id, &mut buffer);
+    read_block_from_output_file(shared_file, block_id, &mut buffer);
     debug!("buffer len after == {}", buffer.len());
 
     let mut hash_layers: Vec<u8> = buffer.to_vec();
@@ -657,7 +670,7 @@ pub fn read_byte_from_file(shared_input_file: &Arc<Mutex<File>>, block_id: u32, 
     return buffer[0];
 }
 
-pub fn read_block_from_file(
+pub fn read_block_from_output_file(
     shared_file: &Arc<Mutex<File>>,
     block_id: u32,
     buffer: &mut [u8],
@@ -668,6 +681,25 @@ pub fn read_block_from_file(
     let _metadata = file.metadata();
     //debug!("block_id == {} while position == {}", block_id, position);
     //debug!("index == {} while file is long {}", index, metadata.unwrap().len());
+
+    file.seek(SeekFrom::Start(index)).unwrap();
+
+    match file.read_exact(buffer) {
+        Ok(_) => {}
+        Err(e) => {
+            error!("Error reading file == {:?}", e)
+        }
+    };
+
+    return buffer.to_vec();
+}
+
+pub fn read_block_from_input_file(
+    file: &mut File,
+    block_id: u32,
+    buffer: &mut [u8],
+) -> Vec<u8> {
+    let index = (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64;
 
     file.seek(SeekFrom::Start(index)).unwrap();
 
