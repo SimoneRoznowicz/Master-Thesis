@@ -320,6 +320,7 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
     let input_lenght = input_file.seek(SeekFrom::End(0))?;
     input_file.seek(SeekFrom::Start(0))?;
     let block_count = ((input_lenght - 1) / GROUP_BYTE_SIZE as u64) + 1;
+    unsafe { NUM_BLOCK_GROUPS_PER_UNIT = block_count };
     let output_lenght = 8 + (64 * block_count) + block_count * GROUP_BYTE_SIZE as u64;
     output_file.set_len(output_lenght)?;
 
@@ -371,8 +372,8 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
 
         // Compute input hash
         let mut output: Vec<u8> = Vec::with_capacity(32 + GROUP_BYTE_SIZE);
-        let input_hash = blake3::hash(&input);
-        let input_hash = input_hash.as_bytes();
+        let input_hash = root_hashes[i as usize];
+
         let key_bytes = GenericArray::from_slice(&input_hash[0..16]);
         let iv_bytes = GenericArray::from_slice(&input_hash[16..32]);
         for i in 0..16 {
