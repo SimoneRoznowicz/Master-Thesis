@@ -22,22 +22,21 @@ pub fn get_root_hash(
     let indx_byte_in_self_fragment = position % FRAGMENT_SIZE as u32;
     let siblings: &Vec<Sibling> = proof.get_siblings();
 
-    // {
-    //     let map = shared_map.lock().unwrap();
-    //     match map.get(&(block_id.clone(), position.clone()))
-    //     {
-    //         Some(value) => {
-    //             self_fragment[indx_byte_in_self_fragment as usize] = *value;
-    //             warn!("Check this inclusion proof with my innput value. block_id == {}, position {}, value {}, \nMap == {:?}", block_id, position, *value, map);
+    {
+        let map = shared_map.lock().unwrap();
+        match map.get(&(block_id.clone(), position.clone()))
+        {
+            Some(value) => {
+                self_fragment[indx_byte_in_self_fragment as usize] = *value;
+                warn!("Check this inclusion proof with my innput value. block_id == {}, position {}, value {}, \nMap == {:?}", block_id, position, *value, map);
+            }
+            None => {
+                error!("Do not check this inclusion proof with my innput value. block_id == {} and position {} Map == {:?}", block_id, position, map);
+            }
+        };
+    }
 
-    //         }
-    //         None => {
-    //             error!("Do not check this inclusion proof with my innput value. block_id == {} and position {} Map == {:?}", block_id, position, map);
-    //         }
-    //     };
-    // }
-
-    info!("Verifier: self_fragment == {:?}", self_fragment);
+    info!("Verifier: value == {:?} self_fragment == {:?}", shared_map.lock().unwrap().get(&(block_id.clone(), position.clone())), self_fragment);
     let mut hash_final = blake3::hash(&self_fragment);
     //debug!("HASH self fragment == {:?}", hash_final.as_bytes());
     for sibling in siblings {

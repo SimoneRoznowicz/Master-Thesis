@@ -637,7 +637,7 @@ pub fn send_collect_block_hashes(sender: &Sender<NotifyNode>) {
 
 pub fn read_byte_from_file(shared_input_file: &Arc<Mutex<File>>, block_id: u32, position: u32) -> u8 {
     let mut file = shared_input_file.lock().unwrap();
-    let index = (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64 + position as u64;
+    let index = (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64 + position as u64 + 8 + HASH_BYTES_LEN as u64*(block_id+1) as u64;
 
     let metadata = file.metadata();
     debug!("block_id == {} while position == {}", block_id, position);
