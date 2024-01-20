@@ -18,11 +18,10 @@ use std::{
 use crate::{
     block_generation::{
         blockgen::GROUP_SIZE,
-        encoder::generate_block_group,
         utils::Utils::{
             FRAGMENT_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION,
             NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, VERIFIABLE_RATIO, BUFFER_DATA_SIZE,
-        },
+        }, encoder::generate_PoS,
     },
     communication::{
         client::send_msg,
@@ -183,12 +182,14 @@ impl Verifier {
                             info!("Handle_Inclusion_Proof started");
                             let sender_clone = sender.clone();
                             let shared_map = Arc::clone(&self.shared_mapping_bytes);
+                            let shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8; 32]>>> = Arc::clone(&self.shared_blocks_hashes);
 
                             thread::spawn(move || {
                                 handle_inclusion_proof(
                                     &notify_node.buff,
                                     &sender_clone,
                                     shared_map,
+                                    shared_blocks_hashes,
                                 );
                             });
                         }
@@ -521,6 +522,7 @@ fn handle_inclusion_proof(
     msg: &[u8],
     sender: &Sender<NotifyNode>,
     shared_map: Arc<Mutex<HashMap<(u32, u32), u8>>>,
+    shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8; 32]>>>,
 ) {
     let mut curr_indx = 0;
     //SO THE MESSAGE WILL BE EVENTALLY: HASH,block_id,byte_position,self_fragment,proof
@@ -548,6 +550,28 @@ fn handle_inclusion_proof(
 
     debug!("V handle_inclusion_proof: len(root_hash_bytes) == {}, block_id == {}, position_in_byte == {}", root_hash_bytes.len(), block_id, position);
 
+    // let mut buffer = vec![0; HASH_BYTES_LEN + NUM_BYTES_IN_BLOCK_GROUP as usize];
+    // read_hash_and_block_from_output_file(&self.shared_file, block_ids[indx], &mut buffer);
+    // let reconstructed_buffer = reconstruct_raw_data(0, &buffer);
+
+    // let group: Vec<[u64; 4]> = generate_PoS(block_id as u64, shared_blocks_hashes.lock().unwrap()[&block_id]);
+    
+    // let raw_byte = self_fragment[(position % FRAGMENT_SIZE as u32) as usize];
+    // let mut xored_byte: u8 = 0;
+    // let map = shared_map.lock().unwrap();
+    // match map.get(&(block_id.clone(), position.clone()))
+    // {
+    //     Some(value) => {
+    //         //self_fragment[indx_byte_in_self_fragment as usize] = *value;
+    //         xored_byte = *value;
+    //         warn!("Check this inclusion proof with my innput value. block_id == {}, position {}, value {}, \nMap == {:?}", block_id, position, *value, map);
+    //     }
+    //     None => {
+    //         error!("Do not check this inclusion proof with my innput value. block_id == {} and position {} Map == {:?}", block_id, position, map);
+    //     }
+    // };
+
+
     let root_hash_computed =
         get_root_hash(&proof, (block_id, position), &shared_map, self_fragment);
     let mut correctness_flag = 1;
@@ -555,9 +579,9 @@ fn handle_inclusion_proof(
         "root_hash_computed.as_bytes() == {:?}",
         root_hash_computed.as_bytes()
     );
-    debug!("root_hash_bytes == {:?}", root_hash_bytes);
 
-    if root_hash_computed.as_bytes() == &root_hash_bytes {
+    let root_hash_computed_bytes = root_hash_computed.as_bytes();
+    if root_hash_computed_bytes == &root_hash_bytes && root_hash_computed_bytes == &shared_blocks_hashes.lock().unwrap()[&block_id] {
         //convert to byte array the hash_retrieved. Then compare.
         info!("Successful Inclusion proof");
         correctness_flag = 0;

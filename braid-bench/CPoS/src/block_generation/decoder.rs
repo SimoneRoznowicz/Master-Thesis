@@ -13,7 +13,9 @@ use log::debug;
 use crate::block_generation::blockgen::{
     block_gen, InitGroup, GROUP_BYTE_SIZE, GROUP_SIZE, INIT_SIZE, N,
 };
-use crate::block_generation::encoder::generate_commitment_hash;
+
+use super::encoder::generate_PoS;
+use super::utils::Utils::HASH_BYTES_LEN;
 
 type Aes128Cbc = cbc::Decryptor<Aes128>;
 
@@ -114,7 +116,7 @@ const ID_PUBLIC_KEY: &[u8] = b"727 is a funny number";
 
 
 
-pub fn decode_orig(mut input_file: &File, mut output_file: File, root_hashes: &Vec<[u8; 32]>) -> io::Result<()> {
+pub fn decode_orig(mut input_file: &File, mut output_file: &File, root_hashes: &Vec<[u8; 32]>) -> io::Result<()> {
     let startup = Instant::now();
 
     let pub_hash = blake3::hash(ID_PUBLIC_KEY);
@@ -200,4 +202,44 @@ pub fn decode_orig(mut input_file: &File, mut output_file: File, root_hashes: &V
     let ms = ttotal.as_micros() as f32 / 1_000.0;
     println!("Decoded the file in {}ms", ms);
     Ok(())
+}
+
+
+
+
+
+pub fn reconstruct_raw_data(block_id: u64, input_hash_and_xored_data: &Vec<u8>) -> Vec<u8>{  //input_hash_and_xored_data containes the hash of the block for the first 32 bytes and then all the xored data of the block
+    let group = generate_PoS(block_id, input_hash_and_xored_data[0..HASH_BYTES_LEN].try_into().unwrap());
+    
+    let mut key_bytes = GenericArray::from([0u8; 16]);
+    let mut iv_bytes = GenericArray::from([0u8; 16]);
+    for i in 0..16 {
+        key_bytes[i] = input_hash_and_xored_data[i];
+        iv_bytes[i] = input_hash_and_xored_data[i + 16];
+    }
+
+    let mut output: Vec<u8> = Vec::with_capacity(GROUP_BYTE_SIZE);
+    // Compute the output : XOR the input with the output of f
+    for i in 0..(N*GROUP_SIZE) {
+        let mut data_bytes = [0u8; 8];
+        for j in 0..8 {
+            data_bytes[j] = input_hash_and_xored_data[32 + i*8 + j];
+        }
+        let mut data = u64::from_le_bytes(data_bytes);
+        data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE];
+        data_bytes = unsafe { transmute(data.to_le()) };
+        for j in 0..8 {
+            output.push(data_bytes[j]);
+        }
+    }
+
+    // TODO : Decrypt with AES
+    let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
+    for i in 0..(GROUP_BYTE_SIZE / 16) {
+        let from = i*16;
+        let to = from + 16;
+        cipher.decrypt_block_mut(GenericArray::from_mut_slice(&mut output[from..to]));
+    }
+    debug!("output === {:?}", output[0..20].to_vec());
+    return output;
 }

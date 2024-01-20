@@ -35,7 +35,6 @@ pub fn generate_commitment_hash (
     let mut root_hash: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
     
     let mut i = 0;
-    let _counter = 0;
     while i + HASH_BYTES_LEN < hash_layers.len() {
         let mut first_fragment: [u8; HASH_BYTES_LEN] = [0; HASH_BYTES_LEN];
         first_fragment.copy_from_slice(&hash_layers[i..i + HASH_BYTES_LEN]);
@@ -301,9 +300,7 @@ pub fn generate_block(i: u64) -> BlockGroup {
 
 
 
-
-
-pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes: &mut Vec<[u8; 32]>) -> io::Result<()> {
+pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes: &mut Vec<[u8; HASH_BYTES_LEN]>) -> io::Result<()> {
     let mut file3 = OpenOptions::new()
     .create(true)
     .append(true)
@@ -338,6 +335,8 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
     for i in 0..block_count {
         root_hashes.push(generate_commitment_hash(&mut input_file, i as u32));
     }
+    debug!("REAL GENERATED ROOT HASHES {:?}",root_hashes);
+
     input_file.seek(SeekFrom::Start(0))?;
 
     // Write blocks
@@ -398,7 +397,7 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
                 data_bytes[j] = input[i*8 + j];
             }
             let mut data = u64::from_le_bytes(data_bytes);
-            data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE];
+            data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE]; //XOR of Encrypted(raw data) ^ PoS
             data_bytes = unsafe { transmute(data.to_le()) };
             for j in 0..8 {
                 output.push(data_bytes[j]);
@@ -409,10 +408,10 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
         output_file.write_all(&output)?;
 
         for b in output{
-            if (cc == 64){
-                let ccstr = " * ";
-                file3.write(ccstr.as_bytes());
-            }
+            // if (cc == 64){
+            //     let ccstr = " * ";
+            //     file3.write(ccstr.as_bytes());
+            // }
             if cc%10 == 0{
                 let new_line = "\n";
                 file3.write(new_line.as_bytes());
@@ -427,4 +426,35 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
     let ms = ttotal.as_micros() as f32 / 1_000.0;
     println!("Encoded the file in {}ms", ms);
     Ok(())
+}
+
+
+pub fn generate_PoS(block_id: u64, root_hash: [u8;HASH_BYTES_LEN]) -> BlockGroup {
+    let pub_hash = blake3::hash(ID_PUBLIC_KEY);
+
+    // Compute init vectors
+    let mut inits: InitGroup = [[0; GROUP_SIZE]; INIT_SIZE];
+    for g in 0..GROUP_SIZE {
+        let pos_bytes: [u8; 8] = unsafe {
+            transmute(((block_id * GROUP_SIZE as u64) + g as u64).to_le())
+        };
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&pos_bytes);
+        hasher.update(pub_hash.as_bytes());
+        hasher.update(&root_hash);
+
+        let block_hash = hasher.finalize();
+        let block_hash = block_hash.as_bytes();
+        for i in 0..INIT_SIZE {
+            let mut hash_bytes = [0u8; 8];
+            for j in 0..8 {
+                hash_bytes[j] = block_hash[i*8 + j]
+            }
+            inits[i][g] = u64::from_le_bytes(hash_bytes);
+        }
+    }
+
+    // Compute block_gen
+    let group = block_gen(inits);
+    return group;
 }
