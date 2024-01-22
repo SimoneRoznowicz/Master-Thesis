@@ -348,8 +348,8 @@ impl Prover {
         // Generate and send all the requested Inclusion Proofs:
         // Send a buffer containing in order: tag, hash and proof
         info!("Generate Merkle Tree and send each created inclusion proofs");
-        let indx = 0;
-        // for indx in 0..block_ids.len() {
+
+        for indx in 0..block_ids.len() {
             debug!("indx == {}", indx);
             //send root_hash + proof + 32_byte_fragment
 
@@ -396,7 +396,7 @@ impl Prover {
             );
             send_msg(&self.stream_opt.as_ref().unwrap(), &msg);
             //thread::sleep(Duration::from_secs(2));
-        // }
+        }
     }
 }
 

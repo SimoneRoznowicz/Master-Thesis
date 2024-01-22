@@ -569,6 +569,7 @@ fn handle_inclusion_proof(
             }
             None => {
                 error!("Do not check this inclusion proof with my innput value. block_id == {} and position {} Map == {:?}", block_id, position, map);
+                return;
             }
         };
     }
@@ -593,7 +594,11 @@ fn handle_inclusion_proof(
             root_hash_computed.as_bytes(),root_hash_bytes,block_hashes[&block_id]
         );
     }
-    if root_hash_computed_bytes == &root_hash_bytes && root_hash_computed_bytes == &block_hashes[&block_id] {
+
+    info!("Checking inclusion proof");
+    if root_hash_computed_bytes == &root_hash_bytes 
+            && root_hash_computed_bytes == &block_hashes[&block_id] 
+            && computed_xored_byte == xored_byte {
         //convert to byte array the hash_retrieved. Then compare.
         info!("Successful Inclusion proof");
         correctness_flag = 0;
