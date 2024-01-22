@@ -12,7 +12,7 @@ use log::{debug,error};
 
 use crate::PoS::prover::read_block_from_input_file;
 use crate::block_generation::blockgen::{
-    block_gen, InitGroup, GROUP_BYTE_SIZE, GROUP_SIZE, INIT_SIZE, N,
+    block_gen, InitGroup, GROUP_BYTE_SIZE, GROUP_SIZE, INIT_SIZE, N, BLOCK_BYTE_SIZE,
 };
 use crate::block_generation::utils::Utils::{NUM_BYTES_IN_BLOCK, NUM_BLOCK_GROUPS_PER_UNIT};
 
@@ -437,12 +437,21 @@ pub fn generate_xored_data(block_id: u32, position: u32, root_hash: [u8;HASH_BYT
     // Compute input hash
     let group = generate_PoS(block_id as u64, root_hash);
     let mut input = vec![0u8; GROUP_BYTE_SIZE];
-
+    debug!("posssition =={}", position);
     let mut number_id_fragment = position / HASH_BYTES_LEN as u32;
     let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
 
     // let indx_start = position / FRAGMENT_SIZE as u32;
     let indx_end = indx_start+FRAGMENT_SIZE;
+
+    let mut k=0;
+    for i in indx_start..indx_end {
+        debug!("k nel ciclo =={} mentre current value è {} e self_fragment[k] è {}",k,input[i], self_fragment[k]);
+        input[i as usize] = self_fragment[k];
+        k+=1;
+    }
+
+    debug!("indx_start == {:?}, indx_end == {}", indx_start, indx_end);
 
     debug!("self_fragment == {:?}", self_fragment);
     let part_input = &input[indx_start as usize..indx_end as usize+5];
@@ -450,7 +459,6 @@ pub fn generate_xored_data(block_id: u32, position: u32, root_hash: [u8;HASH_BYT
 
     let mut output: Vec<u8> = Vec::with_capacity(32 + GROUP_BYTE_SIZE);
     let input_hash = root_hash;
-
 
     for i in 0..32 {
         output.push(input_hash[i]);
@@ -473,17 +481,33 @@ pub fn generate_xored_data(block_id: u32, position: u32, root_hash: [u8;HASH_BYT
     // }
 
     // Compute the output : XOR the input with the output of f
+    let mut flag = false;
+    let margin = (position as u32/8 as u32) as usize;
+    debug!("Just before printing...");
     for i in 0..(N*GROUP_SIZE) {
+        // if i == margin || i == margin+1 || i == margin+2{
+        //     flag =true;
+        // }
         let mut data_bytes = [0u8; 8];
         for j in 0..8 {
             data_bytes[j] = input[i*8 + j];
         }
         let mut data = u64::from_le_bytes(data_bytes);
+        if data != 0 {
+            flag = true;
+            debug!("\n V Index i*8 =={} data_bytes =={:?},\n data u64 == {}",i*8, data_bytes,data);
+        }
+        
         data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE]; //XOR of Encrypted(raw data) ^ PoS
         data_bytes = unsafe { transmute(data.to_le()) };
+        if flag {
+            debug!("\n V AFTER: Index i*8 =={} data_bytes =={:?},\n data u64 == {}",i*8, data_bytes,data);
+        }
+
         for j in 0..8 {
             output.push(data_bytes[j]);
         }
+        flag = false;
     }
 
     if flag == true{
@@ -509,7 +533,8 @@ pub fn generate_xored_data_prover(block_id: u32, position: u32, root_hash: [u8;H
     // Compute input hash
     let group = generate_PoS(block_id as u64, root_hash);
 
-    let input = vec![0u8; GROUP_BYTE_SIZE];
+    //let input = vec![0u8; GROUP_BYTE_SIZE];
+    debug!("posssition prover =={}", position);
 
     let mut number_id_fragment = position / HASH_BYTES_LEN as u32;
     let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
@@ -520,7 +545,7 @@ pub fn generate_xored_data_prover(block_id: u32, position: u32, root_hash: [u8;H
     
     let part_input = &input[indx_start as usize..indx_end as usize];
     debug!("Input before == {:?}", part_input);
-    debug!("indx_start == {:?} and indx_start == {:?}", indx_start,indx_end);
+    debug!("indx_start == {:?} and indx_end == {:?}", indx_start,indx_end);
 
     let mut k = 0;
     
@@ -534,11 +559,11 @@ pub fn generate_xored_data_prover(block_id: u32, position: u32, root_hash: [u8;H
 
     // //END TO REMOVE
     
-    // for i in indx_start..indx_end {
-    //     debug!("k nel ciclo =={} mentre current value è {} e self_fragment[k] è {}",k,input[i], self_fragment[k]);
-    //     input[i as usize] = self_fragment[k];
-    //     k+=1;
-    // }
+    for i in indx_start..indx_end {
+        debug!("k nel ciclo =={} mentre current value è {} e self_fragment[k] è {}",k,input[i], self_fragment[k]);
+        input[i as usize] = self_fragment[k];
+        k+=1;
+    }
     
     //TO REMOVE!!
     // input[50] = 0;
@@ -577,19 +602,28 @@ pub fn generate_xored_data_prover(block_id: u32, position: u32, root_hash: [u8;H
     // }
 
     // Compute the output : XOR the input with the output of f
+    let mut flag = false;
+    let margin = (position as u32/8 as u32) as usize;
     for i in 0..(N*GROUP_SIZE) {
+        if i*8 == indx_start || i*8 == indx_start+8 || i*8 == indx_start+16 || i*8 == indx_start+24 {
+            flag =true;
+        }
         let mut data_bytes = [0u8; 8];
         for j in 0..8 {
             data_bytes[j] = input[i*8 + j];
         }
         let mut data = u64::from_le_bytes(data_bytes);
+        if flag {
+            debug!("\n P Index i*8 =={} data_bytes =={:?},\n data u64 == {}",i*8, data_bytes,data);
+        }
         data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE]; //XOR of Encrypted(raw data) ^ PoS
         data_bytes = unsafe { transmute(data.to_le()) };
-
         for j in 0..8 {
             output.push(data_bytes[j]);
         }
+        flag = false;
     }
+
 
     if flag == true{
         let mut file3 = OpenOptions::new()

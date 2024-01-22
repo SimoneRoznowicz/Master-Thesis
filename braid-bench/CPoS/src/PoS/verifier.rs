@@ -575,8 +575,8 @@ fn handle_inclusion_proof(
 
     let computed_xored_fragment = generate_xored_data(block_id, position, shared_blocks_hashes.lock().unwrap()[&block_id], self_fragment, false);
 
-    let computed_xored_byte = 32 + (computed_xored_fragment[position as usize%FRAGMENT_SIZE as usize]);
-    debug!("real xored_byte is {}\n while your computed xored byte is in {:?}\n while computed xored byte is {}", xored_byte, computed_xored_fragment, computed_xored_byte);
+    let computed_xored_byte = computed_xored_fragment[position as usize%FRAGMENT_SIZE as usize];
+    debug!("V real xored_byte is {}\n while your computed xored byte is in {:?}\n while computed xored byte is {}", xored_byte, computed_xored_fragment, computed_xored_byte);
 
 
     let root_hash_computed =
