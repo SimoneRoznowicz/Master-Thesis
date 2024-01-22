@@ -249,50 +249,50 @@ pub fn generate_commitment_hash (
 
 
 
-pub fn generate_block_group(i: u64) -> BlockGroup {
-    let pub_hash = blake3::hash(ID_PUBLIC_KEY);
+// pub fn generate_block_group(i: u64) -> BlockGroup {
+//     let pub_hash = blake3::hash(ID_PUBLIC_KEY);
 
-    let mut inits: InitGroup = [[0; GROUP_SIZE]; INIT_SIZE];
-    for g in 0..GROUP_SIZE {
-        let pos_bytes: [u8; 8] = unsafe { transmute(((i * GROUP_SIZE as u64) + g as u64).to_le()) };
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(&pos_bytes);
-        hasher.update(pub_hash.as_bytes());
-        let block_hash = hasher.finalize();
-        let block_hash = block_hash.as_bytes();
-        for i in 0..INIT_SIZE {
-            let mut hash_bytes = [0u8; 8];
-            for j in 0..8 {
-                hash_bytes[j] = block_hash[i * 8 + j]
-            }
-            inits[i][g] = u64::from_le_bytes(hash_bytes);
-        }
-    }
-    return block_gen(inits);
-}
+//     let mut inits: InitGroup = [[0; GROUP_SIZE]; INIT_SIZE];
+//     for g in 0..GROUP_SIZE {
+//         let pos_bytes: [u8; 8] = unsafe { transmute(((i * GROUP_SIZE as u64) + g as u64).to_le()) };
+//         let mut hasher = blake3::Hasher::new();
+//         hasher.update(&pos_bytes);
+//         hasher.update(pub_hash.as_bytes());
+//         let block_hash = hasher.finalize();
+//         let block_hash = block_hash.as_bytes();
+//         for i in 0..INIT_SIZE {
+//             let mut hash_bytes = [0u8; 8];
+//             for j in 0..8 {
+//                 hash_bytes[j] = block_hash[i * 8 + j]
+//             }
+//             inits[i][g] = u64::from_le_bytes(hash_bytes);
+//         }
+//     }
+//     return block_gen(inits);
+// }
 
 
-pub fn generate_block(i: u64) -> BlockGroup {
-    let pub_hash = blake3::hash(ID_PUBLIC_KEY);
+// pub fn generate_block(i: u64) -> BlockGroup {
+//     let pub_hash = blake3::hash(ID_PUBLIC_KEY);
 
-    let mut inits: InitGroup = [[0; GROUP_SIZE]; INIT_SIZE];
-    for g in 0..GROUP_SIZE {
-        let pos_bytes: [u8; 8] = unsafe { transmute(((i * GROUP_SIZE as u64) + g as u64).to_le()) };
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(&pos_bytes);
-        hasher.update(pub_hash.as_bytes());
-        let block_hash = hasher.finalize();
-        let block_hash = block_hash.as_bytes();
-        for i in 0..INIT_SIZE {
-            let mut hash_bytes = [0u8; 8];
-            for j in 0..8 {
-                hash_bytes[j] = block_hash[i * 8 + j]
-            }
-            inits[i][g] = u64::from_le_bytes(hash_bytes);
-        }
-    }
-    return block_gen(inits);
-}
+//     let mut inits: InitGroup = [[0; GROUP_SIZE]; INIT_SIZE];
+//     for g in 0..GROUP_SIZE {
+//         let pos_bytes: [u8; 8] = unsafe { transmute(((i * GROUP_SIZE as u64) + g as u64).to_le()) };
+//         let mut hasher = blake3::Hasher::new();
+//         hasher.update(&pos_bytes);
+//         hasher.update(pub_hash.as_bytes());
+//         let block_hash = hasher.finalize();
+//         let block_hash = block_hash.as_bytes();
+//         for i in 0..INIT_SIZE {
+//             let mut hash_bytes = [0u8; 8];
+//             for j in 0..8 {
+//                 hash_bytes[j] = block_hash[i * 8 + j]
+//             }
+//             inits[i][g] = u64::from_le_bytes(hash_bytes);
+//         }
+//     }
+//     return block_gen(inits);
+//}
 
 
 
@@ -373,14 +373,18 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
         let mut output: Vec<u8> = Vec::with_capacity(32 + GROUP_BYTE_SIZE);
         let input_hash = root_hashes[i as usize];
 
-        let key_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[0..16]);
-        let iv_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[16..32]);
-        for i in 0..16 {
-            output.push(key_bytes[i]);
+
+        for i in 0..32 {
+            output.push(input_hash[i]);
         }
-        for i in 0..16 {
-            output.push(iv_bytes[i]);
-        }
+        // let key_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[0..16]);
+        // let iv_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[16..32]);
+        // for i in 0..16 {
+        //     output.push(key_bytes[i]);
+        // }
+        // for i in 0..16 {
+        //     output.push(iv_bytes[i]);
+        // }
 
         // // TODO : Encrypt input with AES using the hash.
         // let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
@@ -439,11 +443,7 @@ pub fn generate_xored_data(block_id: u32, position: u32, root_hash: [u8;HASH_BYT
 
     // let indx_start = position / FRAGMENT_SIZE as u32;
     let indx_end = indx_start+FRAGMENT_SIZE;
-    let mut k = 0;
-    for i in indx_start..indx_end {
-        input[i as usize] = self_fragment[k];
-        k+=1;
-    }
+
     debug!("self_fragment == {:?}", self_fragment);
     let part_input = &input[indx_start as usize..indx_end as usize+5];
     debug!("Input == {:?}", part_input);
@@ -452,14 +452,17 @@ pub fn generate_xored_data(block_id: u32, position: u32, root_hash: [u8;HASH_BYT
     let input_hash = root_hash;
 
 
-    let key_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[0..16]);
-    let iv_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[16..32]);
-    for i in 0..16 {
-        output.push(key_bytes[i]);
+    for i in 0..32 {
+        output.push(input_hash[i]);
     }
-    for i in 0..16 {
-        output.push(iv_bytes[i]);
-    }
+    // let key_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[0..16]);
+    // let iv_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[16..32]);
+    // for i in 0..16 {
+    //     output.push(key_bytes[i]);
+    // }
+    // for i in 0..16 {
+    //     output.push(iv_bytes[i]);
+    // }
 
     // TODO : Encrypt input with AES using the hash.
     // let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
@@ -506,7 +509,7 @@ pub fn generate_xored_data_prover(block_id: u32, position: u32, root_hash: [u8;H
     // Compute input hash
     let group = generate_PoS(block_id as u64, root_hash);
 
-    //let mut input = vec![0u8; GROUP_BYTE_SIZE];
+    let input = vec![0u8; GROUP_BYTE_SIZE];
 
     let mut number_id_fragment = position / HASH_BYTES_LEN as u32;
     let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
@@ -531,11 +534,11 @@ pub fn generate_xored_data_prover(block_id: u32, position: u32, root_hash: [u8;H
 
     // //END TO REMOVE
     
-    for i in indx_start..indx_end {
-        debug!("k nel ciclo =={} mentre current value è {} e self_fragment[k] è {}",k,input[i], self_fragment[k]);
-        input[i as usize] = self_fragment[k];
-        k+=1;
-    }
+    // for i in indx_start..indx_end {
+    //     debug!("k nel ciclo =={} mentre current value è {} e self_fragment[k] è {}",k,input[i], self_fragment[k]);
+    //     input[i as usize] = self_fragment[k];
+    //     k+=1;
+    // }
     
     //TO REMOVE!!
     // input[50] = 0;
@@ -551,15 +554,20 @@ pub fn generate_xored_data_prover(block_id: u32, position: u32, root_hash: [u8;H
     let input_hash = root_hash;
 
 
-    let key_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[0..16]);
-    let iv_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[16..32]);
-    for i in 0..16 {
-        output.push(key_bytes[i]);
-    }
-    for i in 0..16 {
-        output.push(iv_bytes[i]);
+    for i in 0..32 {
+        output.push(input_hash[i]);
     }
 
+    // let key_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[0..16]);
+    // let iv_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[16..32]);
+    // for i in 0..16 {
+    //     output.push(input_hash[0..16]);
+    // }
+    // for i in 0..16 {
+    //     output.push(input_hash[i]);
+    // }
+//6, 223, 66, 203, 214, 21, 5, 66, 181, 190, 222, 239, 37, 148, 182, 90, 117, 81, 152, 118, 192, 97, 213, 41, 156, 18, 202, 141, 230, 100, 234, 81]
+    
     // TODO : Encrypt input with AES using the hash.
     // let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
     // for i in 0..(GROUP_BYTE_SIZE / 16) {
@@ -577,6 +585,7 @@ pub fn generate_xored_data_prover(block_id: u32, position: u32, root_hash: [u8;H
         let mut data = u64::from_le_bytes(data_bytes);
         data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE]; //XOR of Encrypted(raw data) ^ PoS
         data_bytes = unsafe { transmute(data.to_le()) };
+
         for j in 0..8 {
             output.push(data_bytes[j]);
         }

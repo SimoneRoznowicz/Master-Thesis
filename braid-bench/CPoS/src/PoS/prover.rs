@@ -370,7 +370,7 @@ impl Prover {
 
 
 
-                    let generated_xored_data_in_prover = generate_xored_data_prover(block_ids[indx], positions[indx], root_hash, self_fragment, true, reconstructed_buffer);
+                    let generated_xored_data_in_prover = generate_xored_data_prover(block_ids[indx], positions[indx], root_hash, self_fragment, false, reconstructed_buffer);
                     debug!("generated_xored_data_in_prover == {:?}", generated_xored_data_in_prover);
 
 

@@ -164,12 +164,12 @@ pub fn decode_orig(mut input_file: &File, mut output_file: &File, root_hashes: &
 
         // Get input hash
 
-        let mut key_bytes = GenericArray::from([0u8; 16]);
-        let mut iv_bytes = GenericArray::from([0u8; 16]);
-        for i in 0..16 {
-            key_bytes[i] = input[i];
-            iv_bytes[i] = input[i + 16];
-        }
+        // let mut key_bytes = GenericArray::from([0u8; 16]);
+        // let mut iv_bytes = GenericArray::from([0u8; 16]);
+        // for i in 0..16 {
+        //     key_bytes[i] = input[i];
+        //     iv_bytes[i] = input[i + 16];
+        // }
 
         let mut output: Vec<u8> = Vec::with_capacity(GROUP_BYTE_SIZE);
         // Compute the output : XOR the input with the output of f
@@ -211,12 +211,12 @@ pub fn decode_orig(mut input_file: &File, mut output_file: &File, root_hashes: &
 pub fn reconstruct_raw_data(block_id: u64, input_hash_and_xored_data: &Vec<u8>) -> Vec<u8>{  //input_hash_and_xored_data containes the hash of the block for the first 32 bytes and then all the xored data of the block
     let group = generate_PoS(block_id, input_hash_and_xored_data[0..HASH_BYTES_LEN].try_into().unwrap());
     
-    let mut key_bytes = GenericArray::from([0u8; 16]);
-    let mut iv_bytes = GenericArray::from([0u8; 16]);
-    for i in 0..16 {
-        key_bytes[i] = input_hash_and_xored_data[i];
-        iv_bytes[i] = input_hash_and_xored_data[i + 16];
-    }
+    // let mut key_bytes = GenericArray::from([0u8; 16]);
+    // let mut iv_bytes = GenericArray::from([0u8; 16]);
+    // for i in 0..16 {
+    //     key_bytes[i] = input_hash_and_xored_data[i];
+    //     iv_bytes[i] = input_hash_and_xored_data[i + 16];
+    // }
 
     let mut output: Vec<u8> = Vec::with_capacity(GROUP_BYTE_SIZE);
     // Compute the output : XOR the input with the output of f
