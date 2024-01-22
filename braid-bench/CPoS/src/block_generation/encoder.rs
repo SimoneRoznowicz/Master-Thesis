@@ -17,7 +17,7 @@ use crate::block_generation::blockgen::{
 use crate::block_generation::utils::Utils::{NUM_BYTES_IN_BLOCK, NUM_BLOCK_GROUPS_PER_UNIT};
 
 use super::blockgen::BlockGroup;
-use super::utils::Utils::{HASH_BYTES_LEN, NUM_BYTES_IN_BLOCK_GROUP};
+use super::utils::Utils::{HASH_BYTES_LEN, NUM_BYTES_IN_BLOCK_GROUP, FRAGMENT_SIZE};
 type Aes128Cbc = cbc::Encryptor<Aes128>;
 
 const ID_PUBLIC_KEY: &[u8] = b"727 is a funny number";
@@ -373,8 +373,8 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
         let mut output: Vec<u8> = Vec::with_capacity(32 + GROUP_BYTE_SIZE);
         let input_hash = root_hashes[i as usize];
 
-        let key_bytes = GenericArray::from_slice(&input_hash[0..16]);
-        let iv_bytes = GenericArray::from_slice(&input_hash[16..32]);
+        let key_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[0..16]);
+        let iv_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[16..32]);
         for i in 0..16 {
             output.push(key_bytes[i]);
         }
@@ -382,13 +382,13 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
             output.push(iv_bytes[i]);
         }
 
-        // TODO : Encrypt input with AES using the hash.
-        let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
-        for i in 0..(GROUP_BYTE_SIZE / 16) {
-            let from = i*16;
-            let to = from + 16;
-            cipher.encrypt_block_mut(GenericArray::from_mut_slice(&mut input[from..to]));
-        }
+        // // TODO : Encrypt input with AES using the hash.
+        // let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
+        // for i in 0..(GROUP_BYTE_SIZE / 16) {
+        //     let from = i*16;
+        //     let to = from + 16;
+        //     cipher.encrypt_block_mut(GenericArray::from_mut_slice(&mut input[from..to]));
+        // }
 
         // Compute the output : XOR the input with the output of f
         for i in 0..(N*GROUP_SIZE) {
@@ -427,6 +427,185 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
     println!("Encoded the file in {}ms", ms);
     Ok(())
 }
+
+
+pub fn generate_xored_data(block_id: u32, position: u32, root_hash: [u8;HASH_BYTES_LEN], self_fragment: [u8; FRAGMENT_SIZE], flag: bool) -> Vec<u8>{
+    // Compute input hash
+    let group = generate_PoS(block_id as u64, root_hash);
+    let mut input = vec![0u8; GROUP_BYTE_SIZE];
+
+    let mut number_id_fragment = position / HASH_BYTES_LEN as u32;
+    let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
+
+    // let indx_start = position / FRAGMENT_SIZE as u32;
+    let indx_end = indx_start+FRAGMENT_SIZE;
+    let mut k = 0;
+    for i in indx_start..indx_end {
+        input[i as usize] = self_fragment[k];
+        k+=1;
+    }
+    debug!("self_fragment == {:?}", self_fragment);
+    let part_input = &input[indx_start as usize..indx_end as usize+5];
+    debug!("Input == {:?}", part_input);
+
+    let mut output: Vec<u8> = Vec::with_capacity(32 + GROUP_BYTE_SIZE);
+    let input_hash = root_hash;
+
+
+    let key_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[0..16]);
+    let iv_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[16..32]);
+    for i in 0..16 {
+        output.push(key_bytes[i]);
+    }
+    for i in 0..16 {
+        output.push(iv_bytes[i]);
+    }
+
+    // TODO : Encrypt input with AES using the hash.
+    // let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
+    // for i in 0..(GROUP_BYTE_SIZE / 16) {
+    //     let from = i*16;
+    //     let to = from + 16;
+    //     cipher.encrypt_block_mut(GenericArray::from_mut_slice(&mut input[from..to]));
+    // }
+
+    // Compute the output : XOR the input with the output of f
+    for i in 0..(N*GROUP_SIZE) {
+        let mut data_bytes = [0u8; 8];
+        for j in 0..8 {
+            data_bytes[j] = input[i*8 + j];
+        }
+        let mut data = u64::from_le_bytes(data_bytes);
+        data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE]; //XOR of Encrypted(raw data) ^ PoS
+        data_bytes = unsafe { transmute(data.to_le()) };
+        for j in 0..8 {
+            output.push(data_bytes[j]);
+        }
+    }
+
+    if flag == true{
+        let mut file3 = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .read(true)
+            .write(true)
+            .open("generated_almost_empty_out.txt")
+            .unwrap();
+
+        let mut cc = 0;
+        for b in 0..output.len(){
+            let bstr = output[b].to_string() + " ";
+            file3.write(bstr.as_bytes());
+        }
+    }
+    return output[HASH_BYTES_LEN+indx_start as usize..HASH_BYTES_LEN+indx_end as usize].to_vec();
+}
+
+
+pub fn generate_xored_data_prover(block_id: u32, position: u32, root_hash: [u8;HASH_BYTES_LEN], self_fragment: [u8; FRAGMENT_SIZE], flag: bool, mut input: Vec<u8>) -> Vec<u8>{
+    // Compute input hash
+    let group = generate_PoS(block_id as u64, root_hash);
+
+    //let mut input = vec![0u8; GROUP_BYTE_SIZE];
+
+    let mut number_id_fragment = position / HASH_BYTES_LEN as u32;
+    let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
+
+
+    //let indx_start = position / FRAGMENT_SIZE as u32;
+    let indx_end = indx_start+FRAGMENT_SIZE;
+    
+    let part_input = &input[indx_start as usize..indx_end as usize];
+    debug!("Input before == {:?}", part_input);
+    debug!("indx_start == {:?} and indx_start == {:?}", indx_start,indx_end);
+
+    let mut k = 0;
+    
+    // //TO REMOVE
+    // let mut x = indx_start/1000;
+    // while x<(indx_start/100) {
+    //     input[x] = 0;
+    //     x+=1;
+    // }
+    // debug!("x == {}",x);
+
+    // //END TO REMOVE
+    
+    for i in indx_start..indx_end {
+        debug!("k nel ciclo =={} mentre current value è {} e self_fragment[k] è {}",k,input[i], self_fragment[k]);
+        input[i as usize] = self_fragment[k];
+        k+=1;
+    }
+    
+    //TO REMOVE!!
+    // input[50] = 0;
+    // input[0] = 0;
+
+    
+    
+    debug!("self_fragment == {:?}", self_fragment);
+    let part_input = &input[indx_start as usize..indx_end as usize];
+    debug!("Input == {:?}", part_input);
+
+    let mut output: Vec<u8> = Vec::with_capacity(32 + GROUP_BYTE_SIZE);
+    let input_hash = root_hash;
+
+
+    let key_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[0..16]);
+    let iv_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[16..32]);
+    for i in 0..16 {
+        output.push(key_bytes[i]);
+    }
+    for i in 0..16 {
+        output.push(iv_bytes[i]);
+    }
+
+    // TODO : Encrypt input with AES using the hash.
+    // let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
+    // for i in 0..(GROUP_BYTE_SIZE / 16) {
+    //     let from = i*16;
+    //     let to = from + 16;
+    //     cipher.encrypt_block_mut(GenericArray::from_mut_slice(&mut input[from..to]));
+    // }
+
+    // Compute the output : XOR the input with the output of f
+    for i in 0..(N*GROUP_SIZE) {
+        let mut data_bytes = [0u8; 8];
+        for j in 0..8 {
+            data_bytes[j] = input[i*8 + j];
+        }
+        let mut data = u64::from_le_bytes(data_bytes);
+        data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE]; //XOR of Encrypted(raw data) ^ PoS
+        data_bytes = unsafe { transmute(data.to_le()) };
+        for j in 0..8 {
+            output.push(data_bytes[j]);
+        }
+    }
+
+    if flag == true{
+        let mut file3 = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .read(true)
+            .write(true)
+            .open("generated_almost_empty_out.txt")
+            .unwrap();
+
+        let mut cc = 0;
+        for b in 0..output.len(){
+            let bstr = output[b].to_string() + " ";
+            file3.write(bstr.as_bytes());
+        }
+    }
+    return output[HASH_BYTES_LEN+indx_start as usize..HASH_BYTES_LEN+indx_end as usize].to_vec();
+}
+
+
+
+
+
+
+
 
 
 pub fn generate_PoS(block_id: u64, root_hash: [u8;HASH_BYTES_LEN]) -> BlockGroup {

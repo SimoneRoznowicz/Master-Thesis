@@ -21,7 +21,7 @@ use crate::{
         utils::Utils::{
             FRAGMENT_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION,
             NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, VERIFIABLE_RATIO, BUFFER_DATA_SIZE,
-        }, encoder::generate_PoS,
+        }, encoder::{generate_PoS, generate_xored_data},
     },
     communication::{
         client::send_msg,
@@ -555,33 +555,45 @@ fn handle_inclusion_proof(
     // let reconstructed_buffer = reconstruct_raw_data(0, &buffer);
 
     // let group: Vec<[u64; 4]> = generate_PoS(block_id as u64, shared_blocks_hashes.lock().unwrap()[&block_id]);
-    
-    // let raw_byte = self_fragment[(position % FRAGMENT_SIZE as u32) as usize];
-    // let mut xored_byte: u8 = 0;
-    // let map = shared_map.lock().unwrap();
-    // match map.get(&(block_id.clone(), position.clone()))
-    // {
-    //     Some(value) => {
-    //         //self_fragment[indx_byte_in_self_fragment as usize] = *value;
-    //         xored_byte = *value;
-    //         warn!("Check this inclusion proof with my innput value. block_id == {}, position {}, value {}, \nMap == {:?}", block_id, position, *value, map);
-    //     }
-    //     None => {
-    //         error!("Do not check this inclusion proof with my innput value. block_id == {} and position {} Map == {:?}", block_id, position, map);
-    //     }
-    // };
+
+    let raw_byte = self_fragment[(position % FRAGMENT_SIZE as u32) as usize];
+    let mut xored_byte: u8 = 0;
+    {
+        let map = shared_map.lock().unwrap();
+        match map.get(&(block_id.clone(), position.clone()))
+        {
+            Some(value) => {
+                //self_fragment[indx_byte_in_self_fragment as usize] = *value;
+                xored_byte = *value;
+                warn!("Check this inclusion proof with my innput value. block_id == {}, position {}, value {}, \nMap == {:?}", block_id, position, *value, map);
+            }
+            None => {
+                error!("Do not check this inclusion proof with my innput value. block_id == {} and position {} Map == {:?}", block_id, position, map);
+            }
+        };
+    }
+
+    let computed_xored_fragment = generate_xored_data(block_id, position, shared_blocks_hashes.lock().unwrap()[&block_id], self_fragment, false);
+
+    let computed_xored_byte = 32 + (computed_xored_fragment[position as usize%FRAGMENT_SIZE as usize]);
+    debug!("real xored_byte is {}\n while your computed xored byte is in {:?}\n while computed xored byte is {}", xored_byte, computed_xored_fragment, computed_xored_byte);
 
 
     let root_hash_computed =
         get_root_hash(&proof, (block_id, position), &shared_map, self_fragment);
     let mut correctness_flag = 1;
-    debug!(
-        "root_hash_computed.as_bytes() == {:?}",
-        root_hash_computed.as_bytes()
-    );
+
 
     let root_hash_computed_bytes = root_hash_computed.as_bytes();
-    if root_hash_computed_bytes == &root_hash_bytes && root_hash_computed_bytes == &shared_blocks_hashes.lock().unwrap()[&block_id] {
+    let block_hashes;
+    {
+        block_hashes = shared_blocks_hashes.lock().unwrap();
+        debug!(
+            "root_hash_computed.as_bytes() == {:?}\n root_hash_bytes == {:?}\nblock_hashes[&block_id] == {:?}",
+            root_hash_computed.as_bytes(),root_hash_bytes,block_hashes[&block_id]
+        );
+    }
+    if root_hash_computed_bytes == &root_hash_bytes && root_hash_computed_bytes == &block_hashes[&block_id] {
         //convert to byte array the hash_retrieved. Then compare.
         info!("Successful Inclusion proof");
         correctness_flag = 0;

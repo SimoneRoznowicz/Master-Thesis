@@ -187,12 +187,12 @@ pub fn decode_orig(mut input_file: &File, mut output_file: &File, root_hashes: &
         }
 
         // TODO : Decrypt with AES
-        let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
-        for i in 0..(GROUP_BYTE_SIZE / 16) {
-            let from = i*16;
-            let to = from + 16;
-            cipher.decrypt_block_mut(GenericArray::from_mut_slice(&mut output[from..to]));
-        }
+        // let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
+        // for i in 0..(GROUP_BYTE_SIZE / 16) {
+        //     let from = i*16;
+        //     let to = from + 16;
+        //     cipher.decrypt_block_mut(GenericArray::from_mut_slice(&mut output[from..to]));
+        // }
 
         // Write to file
         output_file.write_all(&output)?;
@@ -234,12 +234,12 @@ pub fn reconstruct_raw_data(block_id: u64, input_hash_and_xored_data: &Vec<u8>) 
     }
 
     // TODO : Decrypt with AES
-    let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
-    for i in 0..(GROUP_BYTE_SIZE / 16) {
-        let from = i*16;
-        let to = from + 16;
-        cipher.decrypt_block_mut(GenericArray::from_mut_slice(&mut output[from..to]));
-    }
+    // let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
+    // for i in 0..(GROUP_BYTE_SIZE / 16) {
+    //     let from = i*16;
+    //     let to = from + 16;
+    //     cipher.decrypt_block_mut(GenericArray::from_mut_slice(&mut output[from..to]));
+    // }
     debug!("output === {:?}", output[0..20].to_vec());
     return output;
 }

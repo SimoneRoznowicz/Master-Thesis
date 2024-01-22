@@ -14,10 +14,10 @@ use rand::seq::index;
 
 use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE, GROUP_BYTE_SIZE, BLOCK_BYTE_SIZE};
 use crate::block_generation::decoder::{decode_orig, reconstruct_raw_data};
-use crate::block_generation::encoder::encode_orig;
+use crate::block_generation::encoder::{encode_orig, generate_xored_data, generate_xored_data_prover};
 use crate::block_generation::utils::Utils::{
     BATCH_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,
-    NUM_BYTES_IN_BLOCK, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, BUFFER_DATA_SIZE, NUM_BYTES_IN_BLOCK_GROUP,
+    NUM_BYTES_IN_BLOCK, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, BUFFER_DATA_SIZE, NUM_BYTES_IN_BLOCK_GROUP, FRAGMENT_SIZE,
 };
 use crate::communication::client::send_msg;
 use crate::communication::handle_prover::random_path_generator;
@@ -52,7 +52,7 @@ impl Prover {
         debug!("beginning of new Prover");
         let unit: Vec<FragmentGroup> = Vec::new();
 
-        let mut files_to_remove = vec!["test_main.bin","output.txt","output.bin","reconstructed.mp4"];
+        let mut files_to_remove = vec!["test_main.bin","output.txt","output.bin","reconstructed.mp4","generated_almost_empty_out.txt"];
         for file_path in files_to_remove {
             match fs::remove_file(file_path) {
                 Ok(()) => {
@@ -313,7 +313,7 @@ impl Prover {
         }
         send_msg(&self.stream_opt.as_ref().unwrap(), &data_block_hashes);
     }
-//209720
+
     pub fn create_inclusion_proofs(&mut self, msg: &[u8]) {
         //SO THE CREATED MESSAGE WILL BE EVENTALLY: TAG,HASH,block_id,byte_position,self_fragment,proof
         info!("Started creating Inclusion Proofs");
@@ -348,16 +348,33 @@ impl Prover {
         // Generate and send all the requested Inclusion Proofs:
         // Send a buffer containing in order: tag, hash and proof
         info!("Generate Merkle Tree and send each created inclusion proofs");
-        for indx in 0..block_ids.len() {
+        let indx = 0;
+        // for indx in 0..block_ids.len() {
             debug!("indx == {}", indx);
             //send root_hash + proof + 32_byte_fragment
 
             let mut buffer = vec![0; HASH_BYTES_LEN + NUM_BYTES_IN_BLOCK_GROUP as usize];
             read_hash_and_block_from_output_file(&self.shared_file, block_ids[indx], &mut buffer);
+
+                    let mut number_id_fragment = positions[indx] / HASH_BYTES_LEN as u32;
+                    let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
+        
+
+                    // let indx_start = positions[indx]/FRAGMENT_SIZE as u32;
+                    debug!("original xored_data_in_prover == {:?}", buffer[HASH_BYTES_LEN+indx_start as usize..HASH_BYTES_LEN*2+indx_start as usize].to_vec());
+
             let reconstructed_buffer = reconstruct_raw_data(block_ids[indx] as u64, &buffer);
 
             let (proof_mod, self_fragment, root_hash) =
                 generate_proof_array(&reconstructed_buffer, block_ids[indx], positions[indx]);
+
+
+
+                    let generated_xored_data_in_prover = generate_xored_data_prover(block_ids[indx], positions[indx], root_hash, self_fragment, true, reconstructed_buffer);
+                    debug!("generated_xored_data_in_prover == {:?}", generated_xored_data_in_prover);
+
+
+
             // let hash_root_retrieved = get_root_hash_mod(&proof_mod, (0,0), 0, self_fragment);
             // debug!("Prover: root_hash generated == {:?} \nhash_root_retrieved == {:?}",root_hash,hash_root_retrieved.as_bytes());
 
@@ -379,7 +396,7 @@ impl Prover {
             );
             send_msg(&self.stream_opt.as_ref().unwrap(), &msg);
             //thread::sleep(Duration::from_secs(2));
-        }
+        // }
     }
 }
 
