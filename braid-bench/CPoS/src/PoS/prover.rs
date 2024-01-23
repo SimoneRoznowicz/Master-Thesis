@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions, Permissions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
@@ -14,7 +15,7 @@ use rand::seq::index;
 
 use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE, GROUP_BYTE_SIZE, BLOCK_BYTE_SIZE};
 use crate::block_generation::decoder::{decode_orig, reconstruct_raw_data};
-use crate::block_generation::encoder::{encode_orig, generate_xored_data, generate_xored_data_prover};
+use crate::block_generation::encoder::{encode_orig, generate_xored_data};
 use crate::block_generation::utils::Utils::{
     BATCH_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,
     NUM_BYTES_IN_BLOCK, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, BUFFER_DATA_SIZE, NUM_BYTES_IN_BLOCK_GROUP, FRAGMENT_SIZE,
@@ -31,7 +32,7 @@ pub struct Prover {
     address: String,
     stream_opt: Option<TcpStream>,
     seed: u8,
-    iteration: u32,
+    iteration: u64,
     shared_file: Arc<Mutex<File>>,
 }
 
@@ -317,15 +318,18 @@ impl Prover {
     pub fn create_inclusion_proofs(&mut self, msg: &[u8]) {
         //SO THE CREATED MESSAGE WILL BE EVENTALLY: TAG,HASH,block_id,byte_position,self_fragment,proof
         info!("Started creating Inclusion Proofs");
-        let mut block_ids: Vec<u32> = Vec::new();
-        let mut positions: Vec<u32> = Vec::new();
+        // let mut block_ids: Vec<u32> = Vec::new();
+        // let mut positions: Vec<u32> = Vec::new();
+        let mut block_ids_positions: HashSet<(u32, u32)> = HashSet::new();  //k: iteration; v:(block_id,position)
+
         let mut i = 1;
         // Retrieve block_ids and positions from msg by the verifier
+        let mut k = 0;
         while i < msg.len() {
             let mut index_array: [u8; NUM_BYTES_PER_BLOCK_ID] = [0; NUM_BYTES_PER_BLOCK_ID];
             index_array.copy_from_slice(&msg[i..i + NUM_BYTES_PER_BLOCK_ID]);
             let retrieved_block_id = u32::from_le_bytes(index_array);
-            block_ids.push(retrieved_block_id);
+            // block_ids.push(retrieved_block_id);
             debug!(
                 "indxx == {} and retrieved_block_id == {}",
                 i, retrieved_block_id
@@ -338,40 +342,45 @@ impl Prover {
             );
             let retrieved_pos = u32::from_le_bytes(position_array);
             debug!("indxx == {} and retrieved_pos == {}", i, retrieved_pos);
-            positions.push(retrieved_pos);
+            // positions.push(retrieved_pos);
 
+            block_ids_positions.insert((retrieved_block_id,retrieved_pos));
+
+            k+=1;
             i += NUM_BYTES_PER_BLOCK_ID + NUM_BYTES_PER_POSITION;
         }
-        debug!("block_ids == {:?}", block_ids); //Correct
-        debug!("positions == {:?}", positions); //Correct
+        // info!("block_ids == {:?}", block_ids); //Correct
+        // info!("positions == {:?}", positions); //Correct
+        info!("block_ids_positions == {:?}", block_ids_positions);
 
         // Generate and send all the requested Inclusion Proofs:
         // Send a buffer containing in order: tag, hash and proof
         info!("Generate Merkle Tree and send each created inclusion proofs");
 
-        for indx in 0..block_ids.len() {
-            debug!("indx == {}", indx);
+        for elem in block_ids_positions {
+        // for indx in 0..k {
+            //debug!("indx == {}\n", indx);
             //send root_hash + proof + 32_byte_fragment
 
             let mut buffer = vec![0; HASH_BYTES_LEN + NUM_BYTES_IN_BLOCK_GROUP as usize];
-            read_hash_and_block_from_output_file(&self.shared_file, block_ids[indx], &mut buffer);
+            read_hash_and_block_from_output_file(&self.shared_file, elem.0, &mut buffer);
 
-                    let mut number_id_fragment = positions[indx] / HASH_BYTES_LEN as u32;
-                    let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
+                    // let mut number_id_fragment = positions[indx] / HASH_BYTES_LEN as u32;
+                    // let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
         
 
-                    // let indx_start = positions[indx]/FRAGMENT_SIZE as u32;
-                    debug!("original xored_data_in_prover == {:?}", buffer[HASH_BYTES_LEN+indx_start as usize..HASH_BYTES_LEN*2+indx_start as usize].to_vec());
+                    // // let indx_start = positions[indx]/FRAGMENT_SIZE as u32;
+                    // debug!("original xored_data_in_prover == {:?}", buffer[HASH_BYTES_LEN+indx_start as usize..HASH_BYTES_LEN*2+indx_start as usize].to_vec());
 
-            let reconstructed_buffer = reconstruct_raw_data(block_ids[indx] as u64, &buffer);
+            let reconstructed_buffer = reconstruct_raw_data(elem.0 as u64, &buffer);
 
             let (proof_mod, self_fragment, root_hash) =
-                generate_proof_array(&reconstructed_buffer, block_ids[indx], positions[indx]);
+                generate_proof_array(&reconstructed_buffer, elem.0, elem.1);
 
 
 
-                    let generated_xored_data_in_prover = generate_xored_data_prover(block_ids[indx], positions[indx], root_hash, self_fragment, false, reconstructed_buffer);
-                    debug!("generated_xored_data_in_prover == {:?}", generated_xored_data_in_prover);
+                    // let generated_xored_data_in_prover = generate_xored_data_prover(block_ids[indx], positions[indx], root_hash, self_fragment, false, reconstructed_buffer);
+                    // debug!("generated_xored_data_in_prover == {:?}", generated_xored_data_in_prover);
 
 
 
@@ -384,18 +393,13 @@ impl Prover {
 
             let mut msg = vec![4]; // tag == 4 -> Handle Inclusion Proof
             msg.extend_from_slice(&root_hash); //HASH
-            msg.extend_from_slice(&block_ids[indx].to_le_bytes()); //block_id
-            msg.extend_from_slice(&positions[indx].to_le_bytes()); //byte_position
+            msg.extend_from_slice(&elem.0.to_le_bytes()); //block_id
+            msg.extend_from_slice(&elem.1.to_le_bytes()); //byte_position
             msg.extend_from_slice(&self_fragment); //self_fragment
             msg.extend_from_slice(&bytes_proof); //proof
 
-            debug!(
-                "Sent incl proof number {} out of {} proofs to be verified",
-                indx,
-                block_ids.len()
-            );
+
             send_msg(&self.stream_opt.as_ref().unwrap(), &msg);
-            //thread::sleep(Duration::from_secs(2));
         }
     }
 }
@@ -596,16 +600,16 @@ pub fn create_and_send_proof_batches(
     mut seed: u8,
     _receiver: &Receiver<NotifyNode>,
     file: &Arc<Mutex<File>>,
-    mut iteration: u32,
-) -> (u8, u32) {
+    mut iteration: u64,
+) -> (u8, u64) {
     let mut block_id: u32 = INITIAL_BLOCK_ID; // Given parameter
     let mut position: u32 = INITIAL_POSITION; // Given parameter
     let mut proof_batch: [u8; BATCH_SIZE] = [0; BATCH_SIZE];
     debug!("Preparing batch of proofs.");
     debug!("Initial random seed == {}", seed);
     let init_iteration = iteration;
-    while iteration < init_iteration + proof_batch.len() as u32 {
-        (block_id, position, seed) = random_path_generator(seed, iteration as u8);
+    while iteration < init_iteration + proof_batch.len() as u64 {
+        (block_id, position, seed) = random_path_generator(seed, iteration);
 
         proof_batch[(iteration - init_iteration) as usize] =
             read_byte_from_file(file, block_id, position);

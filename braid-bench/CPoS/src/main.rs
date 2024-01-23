@@ -144,7 +144,7 @@ fn main() {
         println!("rrtot in one shot == {:?},in more hashes == {:?}", hrrtot.as_bytes(), hrr1hrr2.as_bytes());
 
     } else {
-        // let target = Box::new(File::create("log.txt").expect("Can't create file"));
+        let target = Box::new(File::create("log.txt").expect("Can't create file"));
 
         // env_logger::Builder::new()
         //     .target(env_logger::Target::Pipe(target))
@@ -161,8 +161,6 @@ fn main() {
         //         )
         //     })
         //     .init();
-        // debug!("hello");
-        // info!("Simone");
 
         let args: Vec<String> = env::args().collect();
         println!("arr == {:?}", args);

@@ -6,17 +6,17 @@ use std::hash::{Hash, Hasher};
 use crate::block_generation::utils::Utils::{NUM_BYTES_IN_BLOCK, NUM_BYTES_IN_BLOCK_GROUP, NUM_BLOCK_GROUPS_PER_UNIT};
 
 // // Try not to generate every time
-pub fn random_path_generator(seed: u8, iteration: u8) -> (u32, u32, u8) {
+pub fn random_path_generator(seed: u8, iteration: u64) -> (u32, u32, u8) {
     let mut hasher_nxt_block = DefaultHasher::new();
     let mut hasher_nxt_pos = DefaultHasher::new();
     let mut hasher_seed = DefaultHasher::new();
 
     seed.hash(&mut hasher_nxt_block);
     let new_id = hasher_nxt_block.finish() % unsafe { NUM_BLOCK_GROUPS_PER_UNIT } as u64;  //NUM_BLOCKS_PER_UNIT NON HA PIU MOTIVO DI ESISTERE
-    info!(
-        "PROVER: hasher_nxt_block.finish()  {}",
-        hasher_nxt_block.finish()
-    );
+    // info!(
+    //     "PROVER: hasher_nxt_block.finish()  {}",
+    //     hasher_nxt_block.finish()
+    // );
 
     seed.hash(&mut hasher_nxt_pos);
     NUM_BYTES_IN_BLOCK.hash(&mut hasher_nxt_pos);

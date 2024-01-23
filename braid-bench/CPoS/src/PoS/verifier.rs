@@ -312,7 +312,7 @@ impl Verifier {
         let mut block_ids_pos: Vec<(u32, u32)> = vec![];
 
         for iteration in 0..msg.len() {
-            (block_id, position, self.seed) = random_path_generator(self.seed, iteration as u8);
+            (block_id, position, self.seed) = random_path_generator(self.seed, iteration as u64);
             block_ids_pos.push((block_id, position));
         }
 
@@ -389,6 +389,10 @@ impl Verifier {
         }
         info!("Successful Correctness Verification");
 
+        {
+            let map = self.shared_mapping_bytes.lock().unwrap();
+            info!("Map completely created len == {:?}\n map == {:?}",map.len(),map);
+        }
         send_msg(&self.stream, &verified_blocks_and_positions);
         return true;
     }
@@ -565,10 +569,10 @@ fn handle_inclusion_proof(
             Some(value) => {
                 //self_fragment[indx_byte_in_self_fragment as usize] = *value;
                 xored_byte = *value;
-                warn!("Check this inclusion proof with my innput value. block_id == {}, position {}, value {}, \nMap == {:?}", block_id, position, *value, map);
+                warn!("Check this inclusion proof with my innput value. block_id == {}, position {}, value {}, map.len =={}\nMap == {:?}", block_id, position, *value, map.len(), map);
             }
             None => {
-                error!("Do not check this inclusion proof with my innput value. block_id == {} and position {} Map == {:?}", block_id, position, map);
+                error!("Do not check this inclusion proof with my innput value. block_id == {} and position {}, map.len =={} Map == {:?}", block_id, position, map.len(), map);
                 return;
             }
         };
