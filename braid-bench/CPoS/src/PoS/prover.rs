@@ -21,7 +21,7 @@ use crate::block_generation::utils::Utils::{
     NUM_BYTES_IN_BLOCK, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, BUFFER_DATA_SIZE, NUM_BYTES_IN_BLOCK_GROUP, FRAGMENT_SIZE,
 };
 use crate::communication::client::send_msg;
-use crate::communication::handle_prover::random_path_generator;
+use crate::communication::path_generator::random_path_generator;
 use crate::communication::structs::{Notification, NotifyNode};
 use crate::Merkle_Tree::structs::{Direction, Proof, Sibling};
 
@@ -75,11 +75,11 @@ impl Prover {
             .write(true)
             .read(true)
             .open("output.bin").unwrap();
-        let mut reconstructed_file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .read(true)
-            .open("reconstructed.mp4").unwrap();
+        // let mut reconstructed_file = OpenOptions::new()
+        //     .create(true)
+        //     .write(true)
+        //     .read(true)
+        //     .open("reconstructed.mp4").unwrap();
 
 
         let mut root_hashes = Vec::new();
@@ -89,10 +89,10 @@ impl Prover {
             Err(e) => {error!("Error while encoding: {:?}",e)},
         };
 
-        match decode_orig(&output_file, &reconstructed_file, &root_hashes) {
-            Ok(_) => {info!("Correctly decoded")},
-            Err(e) => {error!("Error while decoding: {:?}",e)},
-        };
+        // match decode_orig(&output_file, &reconstructed_file, &root_hashes) {
+        //     Ok(_) => {info!("Correctly decoded")},
+        //     Err(e) => {error!("Error while decoding: {:?}",e)},
+        // };
 
         let metadata = input_file.metadata();
         debug!("input-img len = {}", metadata.unwrap().len());
@@ -120,16 +120,16 @@ impl Prover {
         };
         debug!("%%% Real input_buf == {:?}", input_buf[0..20].to_vec());
 
-        
-        reconstructed_file.seek(SeekFrom::Start(0));
-        let mut correctly_reconstructed_buf = vec![0u8; GROUP_BYTE_SIZE];
-        match reconstructed_file.read_exact(&mut correctly_reconstructed_buf) {
-            Ok(_) => {}
-            Err(e) => {
-                error!("Error reading file == {:?}", e)
-            }
-        };
-        debug!("correctly reconstructed input_buf == {:?}", correctly_reconstructed_buf[0..20].to_vec());
+
+        // reconstructed_file.seek(SeekFrom::Start(0));
+        // let mut correctly_reconstructed_buf = vec![0u8; GROUP_BYTE_SIZE];
+        // match reconstructed_file.read_exact(&mut correctly_reconstructed_buf) {
+        //     Ok(_) => {}
+        //     Err(e) => {
+        //         error!("Error reading file == {:?}", e)
+        //     }
+        // };
+        // debug!("correctly reconstructed input_buf == {:?}", correctly_reconstructed_buf[0..20].to_vec());
 
 
         // output_file.seek(SeekFrom::Start(8));
@@ -205,7 +205,7 @@ impl Prover {
         //         }
         //     }
         // }
-        
+
         let sum_time_blocks_creation: u128 = time_block_creation.iter().sum();
         debug!("Average time passed for 4 blocks creation is {:?}", sum_time_blocks_creation as f64/(1000.0*time_block_creation.len() as f64));
         // let mut encoded: Vec<u8> = bincode::serialize(&unit).unwrap();
@@ -235,7 +235,7 @@ impl Prover {
             loop {
                 let sender_clone = sender.clone();
                 let mut stream_clone = stream.try_clone().unwrap();
-                let mut data = [0; BUFFER_DATA_SIZE]; // Use a smaller buffer size
+                let mut data = vec![0; BUFFER_DATA_SIZE]; // Use a smaller buffer size
                 let retrieved_data = handle_stream(&mut stream_clone, &mut data);
                 handle_message(retrieved_data, sender_clone);
             }
@@ -312,6 +312,8 @@ impl Prover {
             data_block_hashes.extend(read_hashes_from_file(&self.shared_file, offset_start_hash as u64));
             offset_start_hash += HASH_BYTES_LEN + NUM_BYTES_IN_BLOCK_GROUP as usize;
         }
+        debug!("PROVER: BLOCKS MAP == {:?}", data_block_hashes);
+
         send_msg(&self.stream_opt.as_ref().unwrap(), &data_block_hashes);
     }
 
@@ -365,12 +367,10 @@ impl Prover {
             let mut buffer = vec![0; HASH_BYTES_LEN + NUM_BYTES_IN_BLOCK_GROUP as usize];
             read_hash_and_block_from_output_file(&self.shared_file, elem.0, &mut buffer);
 
-                    // let mut number_id_fragment = positions[indx] / HASH_BYTES_LEN as u32;
-                    // let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
-        
+                    let mut number_id_fragment = elem.0 / HASH_BYTES_LEN as u32;
+                    let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
 
-                    // // let indx_start = positions[indx]/FRAGMENT_SIZE as u32;
-                    // debug!("original xored_data_in_prover == {:?}", buffer[HASH_BYTES_LEN+indx_start as usize..HASH_BYTES_LEN*2+indx_start as usize].to_vec());
+                    debug!("original xored_data_in_prover == {:?}", buffer[HASH_BYTES_LEN+indx_start as usize..HASH_BYTES_LEN*2+indx_start as usize].to_vec());
 
             let reconstructed_buffer = reconstruct_raw_data(elem.0 as u64, &buffer);
 
@@ -379,8 +379,8 @@ impl Prover {
 
 
 
-                    // let generated_xored_data_in_prover = generate_xored_data_prover(block_ids[indx], positions[indx], root_hash, self_fragment, false, reconstructed_buffer);
-                    // debug!("generated_xored_data_in_prover == {:?}", generated_xored_data_in_prover);
+                    let generated_xored_data_in_prover = generate_xored_data(elem.0, elem.1, root_hash, self_fragment, false);
+                    debug!("generated_xored_data_in_prover == {:?}", generated_xored_data_in_prover);
 
 
 
@@ -613,13 +613,13 @@ pub fn create_and_send_proof_batches(
 
         proof_batch[(iteration - init_iteration) as usize] =
             read_byte_from_file(file, block_id, position);
-        warn!(
-            "P: Iteration: {}, block_id = {}, position = {}, value = {}",
-            iteration - init_iteration,
-            block_id,
-            position,
-            proof_batch[(iteration - init_iteration) as usize]
-        );
+        // warn!(
+        //     "P: Iteration: {}, block_id = {}, position = {}, value = {}",
+        //     iteration - init_iteration,
+        //     block_id,
+        //     position,
+        //     proof_batch[(iteration - init_iteration) as usize]
+        // );
 
         iteration += 1;
     }
@@ -629,7 +629,6 @@ pub fn create_and_send_proof_batches(
     response_msg[1..].copy_from_slice(&proof_batch);
     debug!("Before send_msg_prover");
     send_msg(stream.as_ref().unwrap(), &response_msg);
-    debug!("Batch of proofs sent from prover to verifier");
 
     return (seed, iteration);
 }
@@ -693,6 +692,7 @@ pub fn read_byte_from_file(shared_input_file: &Arc<Mutex<File>>, block_id: u32, 
     file.seek(SeekFrom::Start(index)).unwrap();
 
     //Expected total size of the file: block_size*20 = ~80 Miliardi
+    let mut start_t = Instant::now();
     let mut buffer = [0; 1];
     match file.read_exact(&mut buffer) {
         Ok(_) => {}
@@ -700,11 +700,12 @@ pub fn read_byte_from_file(shared_input_file: &Arc<Mutex<File>>, block_id: u32, 
             error!("Error reading file == {:?}", e)
         }
     };
-
+    let mut end_t = Instant::now();
+    info!("Time to read 1 byte in micro seconds: {}", (end_t-start_t).as_micros());
     return buffer[0];
 }
 
-pub fn read_hash_and_block_from_output_file(
+pub fn read_hash_and_block_from_output_file (
     shared_file: &Arc<Mutex<File>>,
     block_id: u32,
     buffer: &mut [u8],

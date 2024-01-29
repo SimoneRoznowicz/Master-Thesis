@@ -1,5 +1,9 @@
 use std::vec::Vec;
 
+use bincode::Error;
+
+use log::{debug,error, info};
+
 pub const E: usize = 16;
 pub const D: usize = E + 1; // Amount of dependencies of each fragment
 pub const N: usize = 1 << E as usize; // Amount of fragment per block
@@ -28,8 +32,10 @@ pub type InitGroup = [FragmentGroup; INIT_SIZE]; //array of 4 elements: each ele
 
 pub fn block_gen(inits: InitGroup) -> BlockGroup {
     if is_x86_feature_detected!("avx2") {
+        //info!("AVX2 activated");
         unsafe { block_gen_avx2(inits) }
     } else {
+        //info!("AVX2 NOT activated");
         block_gen_inner(inits)
     }
 }

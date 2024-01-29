@@ -7,9 +7,9 @@ extern crate env_logger;
 extern crate log;
 
 use std::fs::{OpenOptions, self, File};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::{thread, env};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 // use first_rust_project::Direction;
 
 use chrono::Local;
@@ -44,7 +44,31 @@ fn set_logger(level_filter: String) {
         .init();
 }
 
-// block_id == 0 while position == 406227  225
+fn count_elements(target: u32, good_elem: u32, bad_elem: u32) -> (u32, u32) {
+    let mut sum = 0;
+    let mut iter = 0;
+    let mut good_count = 0;
+    let mut bad_count = 0;
+    while iter<10{
+        if sum < target {
+            sum += bad_elem;
+            bad_count +=1;
+        } else {
+            sum += good_elem;
+            good_count +=1;
+        }
+        iter+=1;
+    }
+    //let's be more precise, maybe  overestimated the bad proofs number
+    if sum >= target+bad_count{
+        good_count+=1;
+        bad_count-=1;
+        sum = sum + good_count - bad_count;
+    }
+    
+    return (good_count,bad_count);
+}
+
 
 /*A block_group is made of a Vec<[u64,4]>: a Vector containing (2^16 = 65536 elements).
     So in total: there are 2^18 = 262144 u64 elements --> 2^21 = 2097152 u8 elements in a block_group
@@ -61,90 +85,16 @@ fn main() {
                 eprintln!("Error removing file: {:?}", err);
             }
         }
-        let mut file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open("TestFile.bin")
-            .unwrap();
-
-        // for i in 0..block_group.len() {
-        //     let block = block_group[i];
-        //     for bytes_fragment in block {
-        //         let byte_fragment = bytes_fragment.to_le_bytes();
-        //         file.write_all(&byte_fragment).unwrap();
-        //     }
-        // }
-
-        let metadataa = file.metadata();
-        println!("length file = {}", metadataa.unwrap().len());
-
-        //file.write_all(&bufu8).unwrap();
-
-        //file.seek(SeekFrom::Start(0)).unwrap();
-        let mut v = Vec::new();
-        match file.read_to_end(&mut v) {
-            Ok(_) => {}
-            Err(e) => {
-                print!("error == {:?}", e)
-            }
-        };
-
-        println!("buffer == {:?} \nof length == {} ", v, v.len());
-        let num_u64: u64 = 123456;
-        println!("{:?}", num_u64.to_le_bytes());
-        println!("{:?}", num_u64.to_ne_bytes());
-        let num_u8 = num_u64.to_le_bytes();
-        println!("converted == {}", u64::from_le_bytes(num_u8));
-
-        println!("***********************************");
-        let mut vec = Vec::new();
-        vec.push(1);
-        vec.push(2);
-        vec.push(3);
-
-        let arr = [1, 2, 3];
-
-        let harr = blake3::hash(&arr);
-        let hvec = blake3::hash(&vec);
-        println!("arr == {:?},\nvec == {:?}", harr, hvec);
-
-        let vec1 = vec![
-            121, 42, 92, 135, 49, 186, 219, 126, 247, 25, 118, 177, 21, 79, 159, 252, 58, 185, 38,
-            205, 11, 82, 212, 176, 218, 91, 127, 156, 100, 213, 116, 29,
-        ];
-        let vec2 = vec![
-            22, 26, 39, 66, 49, 154, 130, 164, 210, 247, 195, 34, 166, 145, 59, 64, 20, 242, 245,
-            201, 171, 111, 105, 244, 91, 146, 248, 127, 238, 93, 32, 58,
-        ];
-
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(&vec2);
-        hasher.update(&vec1);
-        println!("FINALIZED == {:?}", hasher.finalize().as_bytes());
-
-        let mut hasherr = blake3::Hasher::new();
-        hasherr.update(&vec1);
-        hasherr.update(&vec2);
-        println!("FINALIZED r == {:?}", hasherr.finalize().as_bytes());
-
-        let rr1 = vec![1, 2];
-        let rr2 = vec![3, 4];
-        let rrtot = vec![1, 2, 3, 4];
-
-        let hrr1 = blake3::hash(&rr1);
-        let hrr2 = blake3::hash(&rr2);
-        let mut hasherr = blake3::Hasher::new();
-        hasherr.update(hrr1.as_bytes());
-        hasherr.update(hrr2.as_bytes());
-        let hrr1hrr2 = hasherr.finalize();
-
-        let hrrtot = blake3::hash(&rrtot);
-
-        println!("rrtot in one shot == {:?},in more hashes == {:?}", hrrtot.as_bytes(), hrr1hrr2.as_bytes());
-
+        let target = 22007;
+        let good_elem = 7;
+        let bad_elem = 20;    //140+21= 161
+        //120+28 = 148
+        let (good_elem, bad_elem) = count_elements(target,good_elem,bad_elem);
+        println!("Number of good_elem: {}", good_elem);
+        println!("Number of bad_elem : {}", bad_elem);
+    
     } else {
-        let target = Box::new(File::create("log.txt").expect("Can't create file"));
+        // let target = Box::new(File::create("log.txt").expect("Can't create file"));
 
         // env_logger::Builder::new()
         //     .target(env_logger::Target::Pipe(target))
@@ -182,3 +132,37 @@ fn main() {
         thread::sleep(Duration::from_secs(100));
     }
 }
+
+
+
+
+
+/*
+    // let time_start;
+    // {
+    //     time_start = shared_time_start.lock().unwrap().to_owned();
+    // }
+    // let delta_time = (time_curr-time_start).as_micros();
+    // error!("proofs len == {}", proofs.len());
+    // error!("delta time == {}", delta_time);
+
+    // let (good_proof_count,bad_proof_count) = count_elements(proofs.len(), delta_time, GOOD_PROOF_AVG_TIMING, BAD_PROOF_AVG_TIMING);
+    // let p = good_proof_count as f64 / (bad_proof_count+good_proof_count) as f64;
+    // let std = (1.0/(proofs.len() as f64).sqrt())*(p*(1.0-p)).sqrt();
+    // let inf =-2.576*std+p;
+    // let sup = 2.576*std+p;
+    // error!("inf == {} and sup == {}", inf,sup);
+    // error!("good_proof_count == {}", good_proof_count);
+    // error!("bad_proof_count == {}", bad_proof_count);
+    // error!("p == {}", p);
+
+    // if sup-inf < 0.08 {
+    //     if (sup+inf)/2.0 >= LOWEST_ACCEPTED_STORING_PERCENTAGE as f64{
+    //         error!("**Stop Verification time Successful");
+    //         return Time_Verification_Status::Correct;
+    //     }
+    //     error!("Stop Verification time FAILED");
+    //     return Time_Verification_Status::Incorrect;
+    // }
+
+*/

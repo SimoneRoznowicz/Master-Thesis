@@ -1,3 +1,3 @@
 pub mod client;
-pub mod handle_prover;
+pub mod path_generator;
 pub mod structs;

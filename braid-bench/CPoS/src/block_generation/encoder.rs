@@ -5,10 +5,11 @@ use std::io::{Read, SeekFrom};
 use std::mem::transmute;
 use std::time::Instant;
 
+use rand::distributions::{Bernoulli, Distribution};
 use aes::cipher::{generic_array::GenericArray, BlockEncryptMut, KeyIvInit};
 use aes::Aes128;
 use blake3;
-use log::{debug,error};
+use log::{debug,error, info};
 
 use crate::PoS::prover::read_block_from_input_file;
 use crate::block_generation::blockgen::{
@@ -97,7 +98,7 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
     for i in 0..block_count {
         root_hashes.push(generate_commitment_hash(&mut input_file, i as u32));
     }
-    debug!("REAL GENERATED ROOT HASHES {:?}",root_hashes);
+    info!("REAL GENERATED ROOT HASHES len {:?}",root_hashes.len());
 
     input_file.seek(SeekFrom::Start(0))?;
 
@@ -128,8 +129,13 @@ pub fn encode_orig(mut input_file: File, mut output_file: &File, mut root_hashes
             }
         }
 
+        let mut start_t = Instant::now();
         // Compute block_gen
         let group = block_gen(inits);
+
+        let mut end_t = Instant::now();
+        info!("Time to Create a block: {}", (end_t-start_t).as_micros());
+    
 
         // Compute input hash
         let mut output: Vec<u8> = Vec::with_capacity(32 + GROUP_BYTE_SIZE);
