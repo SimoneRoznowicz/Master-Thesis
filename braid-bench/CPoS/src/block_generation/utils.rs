@@ -18,7 +18,7 @@ pub mod Utils {
     pub static INITIAL_BLOCK_ID: u32 = 0;
     pub static INITIAL_POSITION: u32 = 0;
     pub static NUM_PROOFS_TO_VERIFY: u32 = 10;
-    pub static VERIFIABLE_RATIO: f32 = 0.25;
+    pub static VERIFIABLE_RATIO: f32 = 0.05;
     pub const NUM_BYTES_PER_BLOCK_ID: usize = 4;
     pub const NUM_BYTES_PER_POSITION: usize = 4;
     pub const HASH_BYTES_LEN: usize = 32;
@@ -30,9 +30,8 @@ pub mod Utils {
     // didn't store at least LOWEST_ACCEPTED_STORING_PERCENTAGE of blocks, the timeout is exceeded and the challenge is not passed.
     pub const LOWEST_ACCEPTED_STORING_PERCENTAGE: f64 = 0.9;
 
-    pub const TIME_LIMIT: u128 = 10*1000000;
+    pub const TIME_LIMIT: u128 = 10 * 1000000;
 
     pub const GOOD_PROOF_AVG_TIMING: u128 = 50;
     pub const BAD_PROOF_AVG_TIMING: u128 = 11000;
-
 }

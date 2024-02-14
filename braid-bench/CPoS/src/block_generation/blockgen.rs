@@ -2,7 +2,7 @@ use std::vec::Vec;
 
 use bincode::Error;
 
-use log::{debug,error, info};
+use log::{debug, error, info};
 
 pub const E: usize = 16;
 pub const D: usize = E + 1; // Amount of dependencies of each fragment
@@ -18,7 +18,7 @@ pub const SIZE: usize = (STEPS_LOWERBOUND + (E - 1)) / E;
 pub type FRAGMENT = u64;
 pub const BLOCK_BYTE_SIZE: usize = N * 8;
 
-pub const GROUP_SIZE: usize = 4;
+pub const GROUP_SIZE: usize = 4;                                
 pub const GROUP_BYTE_SIZE: usize = BLOCK_BYTE_SIZE * GROUP_SIZE;
 pub type FragmentGroup = [FRAGMENT; GROUP_SIZE];
 // pub type Block = [Fragment; N as usize];

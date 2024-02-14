@@ -2,23 +2,26 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions, Permissions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::time::{Instant, Duration};
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::{Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, sleep};
+use std::time::{Duration, Instant};
 use std::vec;
 
 use log::{debug, error, info, trace, warn};
 use rand::seq::index;
 
-use crate::block_generation::blockgen::{FragmentGroup, GROUP_SIZE, GROUP_BYTE_SIZE, BLOCK_BYTE_SIZE};
+use crate::block_generation::blockgen::{
+    FragmentGroup, BLOCK_BYTE_SIZE, GROUP_BYTE_SIZE, GROUP_SIZE,
+};
 use crate::block_generation::decoder::{decode_orig, reconstruct_raw_data};
 use crate::block_generation::encoder::{encode_orig, generate_xored_data};
 use crate::block_generation::utils::Utils::{
-    BATCH_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT,
-    NUM_BYTES_IN_BLOCK, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, BUFFER_DATA_SIZE, NUM_BYTES_IN_BLOCK_GROUP, FRAGMENT_SIZE,
+    BATCH_SIZE, BUFFER_DATA_SIZE, FRAGMENT_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID,
+    INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT, NUM_BYTES_IN_BLOCK, NUM_BYTES_IN_BLOCK_GROUP,
+    NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION,
 };
 use crate::communication::client::send_msg;
 use crate::communication::path_generator::random_path_generator;
@@ -53,7 +56,13 @@ impl Prover {
         debug!("beginning of new Prover");
         let unit: Vec<FragmentGroup> = Vec::new();
 
-        let mut files_to_remove = vec!["test_main.bin","output.txt","output.bin","reconstructed.mp4","generated_almost_empty_out.txt"];
+        let mut files_to_remove = vec![
+            "test_main.bin",
+            "output.txt",
+            "output.bin",
+            "reconstructed.mp4",
+            "generated_almost_empty_out.txt",
+        ];
         for file_path in files_to_remove {
             match fs::remove_file(file_path) {
                 Ok(()) => {
@@ -68,25 +77,34 @@ impl Prover {
         let mut input_file = OpenOptions::new()
             .read(true)
             .write(true)
-            .open("input.mp4").unwrap();
+            .open("input.mp4")
+            .unwrap();
 
         let mut output_file = OpenOptions::new()
             .create(true)
             .write(true)
             .read(true)
-            .open("output.bin").unwrap();
+            .open("output.bin")
+            .unwrap();
         // let mut reconstructed_file = OpenOptions::new()
         //     .create(true)
         //     .write(true)
         //     .read(true)
         //     .open("reconstructed.mp4").unwrap();
 
-
         let mut root_hashes = Vec::new();
 
-        match encode_orig(input_file.try_clone().unwrap(), &output_file, &mut root_hashes) {
-            Ok(_) => {info!("Correctly encoded")},
-            Err(e) => {error!("Error while encoding: {:?}",e)},
+        match encode_orig(
+            input_file.try_clone().unwrap(),
+            &output_file,
+            &mut root_hashes,
+        ) {
+            Ok(_) => {
+                info!("Correctly encoded")
+            }
+            Err(e) => {
+                error!("Error while encoding: {:?}", e)
+            }
         };
 
         // match decode_orig(&output_file, &reconstructed_file, &root_hashes) {
@@ -103,11 +121,6 @@ impl Prover {
         //debug!("Output-img == {:?}", output_lenght);
         //debug!("Output-img remaining == {:?}", output_lenght.unwrap()%NUM_BYTES_IN_BLOCK as u64);
 
-
-
-
-
-
         //QUIIII
 
         input_file.seek(SeekFrom::Start(0));
@@ -120,7 +133,6 @@ impl Prover {
         };
         debug!("%%% Real input_buf == {:?}", input_buf[0..20].to_vec());
 
-
         // reconstructed_file.seek(SeekFrom::Start(0));
         // let mut correctly_reconstructed_buf = vec![0u8; GROUP_BYTE_SIZE];
         // match reconstructed_file.read_exact(&mut correctly_reconstructed_buf) {
@@ -130,7 +142,6 @@ impl Prover {
         //     }
         // };
         // debug!("correctly reconstructed input_buf == {:?}", correctly_reconstructed_buf[0..20].to_vec());
-
 
         // output_file.seek(SeekFrom::Start(8));
         // let mut output_buf = vec![0u8; 32];
@@ -159,17 +170,18 @@ impl Prover {
 
         let mut time_block_creation: Vec<u128> = Vec::new();
         let shared_file = Arc::new(Mutex::new(output_file));
-                //read first block in the raw data (input file)
+        //read first block in the raw data (input file)
         //generate PoS for the first block
         //
-
 
         //RECONSTRUCT RAW DATA
         let mut buffer = vec![0; HASH_BYTES_LEN + NUM_BYTES_IN_BLOCK_GROUP as usize];
         read_hash_and_block_from_output_file(&shared_file, 0, &mut buffer);
         let reconstructed_buffer = reconstruct_raw_data(0, &buffer);
-        debug!("%%% Reconstructed raw data {:?}", reconstructed_buffer[0..20].to_vec());
-
+        debug!(
+            "%%% Reconstructed raw data {:?}",
+            reconstructed_buffer[0..20].to_vec()
+        );
 
         // {
         //     //File of total length (2^21)*(NUM_BLOCK_GROUPS_PER_UNIT)
@@ -207,7 +219,10 @@ impl Prover {
         // }
 
         let sum_time_blocks_creation: u128 = time_block_creation.iter().sum();
-        debug!("Average time passed for 4 blocks creation is {:?}", sum_time_blocks_creation as f64/(1000.0*time_block_creation.len() as f64));
+        debug!(
+            "Average time passed for 4 blocks creation is {:?}",
+            sum_time_blocks_creation as f64 / (1000.0 * time_block_creation.len() as f64)
+        );
         // let mut encoded: Vec<u8> = bincode::serialize(&unit).unwrap();
         // let _enc_slice: &[u8] = encoded.as_mut_slice();
 
@@ -255,7 +270,6 @@ impl Prover {
                         is_started = true;
                         info!("Start Notification received");
                         self.seed = notify_node.buff[1];
-                        //info!("buff AT THE START == {:?}", notify_node.buff);
 
                         (self.seed, self.iteration) = create_and_send_proof_batches(
                             &self.stream_opt,
@@ -301,15 +315,18 @@ impl Prover {
 
     pub fn commit_to_data(&mut self) {
         //save all hashes in 1 vector. Send the vector
-        let mut offset_start_hash: usize = 8;  //first 8 bytes are the hash of the whole input file
-        let mut data_block_hashes = vec![8];  //tag 8 == receiving block hashes
+        let mut offset_start_hash: usize = 8; //first 8 bytes are the hash of the whole input file
+        let mut data_block_hashes = vec![8]; //tag 8 == receiving block hashes
         let metadata;
         {
             metadata = self.shared_file.lock().unwrap().metadata();
         }
         let file_len = metadata.unwrap().len();
         while offset_start_hash < file_len as usize {
-            data_block_hashes.extend(read_hashes_from_file(&self.shared_file, offset_start_hash as u64));
+            data_block_hashes.extend(read_hashes_from_file(
+                &self.shared_file,
+                offset_start_hash as u64,
+            ));
             offset_start_hash += HASH_BYTES_LEN + NUM_BYTES_IN_BLOCK_GROUP as usize;
         }
         debug!("PROVER: BLOCKS MAP == {:?}", data_block_hashes);
@@ -322,7 +339,7 @@ impl Prover {
         info!("Started creating Inclusion Proofs");
         // let mut block_ids: Vec<u32> = Vec::new();
         // let mut positions: Vec<u32> = Vec::new();
-        let mut block_ids_positions: HashSet<(u32, u32)> = HashSet::new();  //k: iteration; v:(block_id,position)
+        let mut block_ids_positions: HashSet<(u32, u32)> = HashSet::new(); //k: iteration; v:(block_id,position)
 
         let mut i = 1;
         // Retrieve block_ids and positions from msg by the verifier
@@ -346,9 +363,9 @@ impl Prover {
             debug!("indxx == {} and retrieved_pos == {}", i, retrieved_pos);
             // positions.push(retrieved_pos);
 
-            block_ids_positions.insert((retrieved_block_id,retrieved_pos));
+            block_ids_positions.insert((retrieved_block_id, retrieved_pos));
 
-            k+=1;
+            k += 1;
             i += NUM_BYTES_PER_BLOCK_ID + NUM_BYTES_PER_POSITION;
         }
         // info!("block_ids == {:?}", block_ids); //Correct
@@ -360,29 +377,34 @@ impl Prover {
         info!("Generate Merkle Tree and send each created inclusion proofs");
 
         for elem in block_ids_positions {
-        // for indx in 0..k {
+            // for indx in 0..k {
             //debug!("indx == {}\n", indx);
             //send root_hash + proof + 32_byte_fragment
 
             let mut buffer = vec![0; HASH_BYTES_LEN + NUM_BYTES_IN_BLOCK_GROUP as usize];
             read_hash_and_block_from_output_file(&self.shared_file, elem.0, &mut buffer);
 
-                    let mut number_id_fragment = elem.0 / HASH_BYTES_LEN as u32;
-                    let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
+            let mut number_id_fragment = elem.0 / HASH_BYTES_LEN as u32;
+            let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
 
-                    debug!("original xored_data_in_prover == {:?}", buffer[HASH_BYTES_LEN+indx_start as usize..HASH_BYTES_LEN*2+indx_start as usize].to_vec());
+            debug!(
+                "original xored_data_in_prover == {:?}",
+                buffer[HASH_BYTES_LEN + indx_start as usize
+                    ..HASH_BYTES_LEN * 2 + indx_start as usize]
+                    .to_vec()
+            );
 
             let reconstructed_buffer = reconstruct_raw_data(elem.0 as u64, &buffer);
 
             let (proof_mod, self_fragment, root_hash) =
                 generate_proof_array(&reconstructed_buffer, elem.0, elem.1);
 
-
-
-                    let generated_xored_data_in_prover = generate_xored_data(elem.0, elem.1, root_hash, self_fragment, false);
-                    debug!("generated_xored_data_in_prover == {:?}", generated_xored_data_in_prover);
-
-
+            let generated_xored_data_in_prover =
+                generate_xored_data(elem.0, elem.1, root_hash, self_fragment, false);
+            debug!(
+                "generated_xored_data_in_prover == {:?}",
+                generated_xored_data_in_prover
+            );
 
             // let hash_root_retrieved = get_root_hash_mod(&proof_mod, (0,0), 0, self_fragment);
             // debug!("Prover: root_hash generated == {:?} \nhash_root_retrieved == {:?}",root_hash,hash_root_retrieved.as_bytes());
@@ -397,7 +419,6 @@ impl Prover {
             msg.extend_from_slice(&elem.1.to_le_bytes()); //byte_position
             msg.extend_from_slice(&self_fragment); //self_fragment
             msg.extend_from_slice(&bytes_proof); //proof
-
 
             send_msg(&self.stream_opt.as_ref().unwrap(), &msg);
         }
@@ -681,13 +702,24 @@ pub fn send_collect_block_hashes(sender: &Sender<NotifyNode>) {
     };
 }
 
-pub fn read_byte_from_file(shared_input_file: &Arc<Mutex<File>>, block_id: u32, position: u32) -> u8 {
+pub fn read_byte_from_file(
+    shared_input_file: &Arc<Mutex<File>>,
+    block_id: u32,
+    position: u32,
+) -> u8 {
     let mut file = shared_input_file.lock().unwrap();
-    let index = (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64 + position as u64 + 8 + HASH_BYTES_LEN as u64*(block_id+1) as u64;
+    let index = (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64
+        + position as u64
+        + 8
+        + HASH_BYTES_LEN as u64 * (block_id + 1) as u64;
 
     let metadata = file.metadata();
     debug!("block_id == {} while position == {}", block_id, position);
-    debug!("index == {} while file is long {}", index, metadata.unwrap().len());
+    debug!(
+        "index == {} while file is long {}",
+        index,
+        metadata.unwrap().len()
+    );
 
     file.seek(SeekFrom::Start(index)).unwrap();
 
@@ -701,17 +733,21 @@ pub fn read_byte_from_file(shared_input_file: &Arc<Mutex<File>>, block_id: u32, 
         }
     };
     let mut end_t = Instant::now();
-    info!("Time to read 1 byte in micro seconds: {}", (end_t-start_t).as_micros());
+    debug!(
+        "Time to read 1 byte in micro seconds: {}",
+        (end_t - start_t).as_micros()
+    );
     return buffer[0];
 }
 
-pub fn read_hash_and_block_from_output_file (
+pub fn read_hash_and_block_from_output_file(
     shared_file: &Arc<Mutex<File>>,
     block_id: u32,
     buffer: &mut [u8],
 ) -> Vec<u8> {
     let mut file = shared_file.lock().unwrap();
-    let index = (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64 + 8 + HASH_BYTES_LEN as u64*block_id as u64;
+    let index =
+        (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64 + 8 + HASH_BYTES_LEN as u64 * block_id as u64;
 
     // let _metadata = file.metadata();
     //debug!("block_id == {} while position == {}", block_id, position);
@@ -729,14 +765,15 @@ pub fn read_hash_and_block_from_output_file (
     return buffer.to_vec();
 }
 
-
 pub fn read_block_from_output_file(
     shared_file: &Arc<Mutex<File>>,
     block_id: u32,
     buffer: &mut [u8],
 ) -> Vec<u8> {
     let mut file = shared_file.lock().unwrap();
-    let index = (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64 + 8 + HASH_BYTES_LEN as u64*(block_id+1) as u64;
+    let index = (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64
+        + 8
+        + HASH_BYTES_LEN as u64 * (block_id + 1) as u64;
 
     let _metadata = file.metadata();
     //debug!("block_id == {} while position == {}", block_id, position);
@@ -754,11 +791,7 @@ pub fn read_block_from_output_file(
     return buffer.to_vec();
 }
 
-pub fn read_block_from_input_file(
-    file: &mut File,
-    block_id: u32,
-    buffer: &mut [u8],
-) -> Vec<u8> {
+pub fn read_block_from_input_file(file: &mut File, block_id: u32, buffer: &mut [u8]) -> Vec<u8> {
     let index = (block_id * NUM_BYTES_IN_BLOCK_GROUP) as u64;
 
     file.seek(SeekFrom::Start(index)).unwrap();
@@ -773,7 +806,7 @@ pub fn read_block_from_input_file(
     return buffer.to_vec();
 }
 
-pub fn read_hashes_from_file(shared_file: &Arc<Mutex<File>>, indx: u64) -> [u8;HASH_BYTES_LEN] {
+pub fn read_hashes_from_file(shared_file: &Arc<Mutex<File>>, indx: u64) -> [u8; HASH_BYTES_LEN] {
     let mut file = shared_file.lock().unwrap();
 
     file.seek(SeekFrom::Start(indx)).unwrap();
@@ -808,8 +841,7 @@ pub fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
             //Notify the main thread to start creating inclusion proofs
             trace!("In prover the tag is 7");
             send_collect_block_hashes(&sender);
-        }
-        else {
+        } else {
             error!("In prover the tag is NOT 0 and NOT 2: the tag is {}", tag)
         }
     }

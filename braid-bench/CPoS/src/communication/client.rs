@@ -9,7 +9,7 @@ extern crate log;
 use log::error;
 
 pub fn send_msg(mut stream: &TcpStream, msg: &[u8]) {
-    sleep(Duration::from_millis(20));  //100km single direction delay 
+    sleep(Duration::from_millis(20)); //100km single direction delay
     match stream.write(msg) {
         Ok(_) => {
             stream.flush();

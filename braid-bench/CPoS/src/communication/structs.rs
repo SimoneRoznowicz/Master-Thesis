@@ -36,14 +36,14 @@ pub enum Verification_Status {
 #[derive(Debug, Clone)]
 pub enum Fairness {
     Undecided,
-    Fair,
-    Unfair(Failure_Reason),
+    Successful,
+    Failure(Failure_Reason),
 }
 
 #[derive(Debug, Clone)]
 pub enum Failure_Reason {
     Timeout,
-    Correctness,
+    Incorrect,
 }
 
 #[derive(Debug, Clone)]

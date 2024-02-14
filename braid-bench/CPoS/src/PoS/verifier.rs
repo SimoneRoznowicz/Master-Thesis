@@ -18,15 +18,19 @@ use std::{
 use crate::{
     block_generation::{
         blockgen::GROUP_SIZE,
+        encoder::{generate_PoS, generate_xored_data},
         utils::Utils::{
-            BAD_PROOF_AVG_TIMING, BUFFER_DATA_SIZE, FRAGMENT_SIZE, GOOD_PROOF_AVG_TIMING, HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, LOWEST_ACCEPTED_STORING_PERCENTAGE, NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, TIME_LIMIT, VERIFIABLE_RATIO
-        }, encoder::{generate_PoS, generate_xored_data},
+            BAD_PROOF_AVG_TIMING, BUFFER_DATA_SIZE, FRAGMENT_SIZE, GOOD_PROOF_AVG_TIMING,
+            HASH_BYTES_LEN, INITIAL_BLOCK_ID, INITIAL_POSITION, LOWEST_ACCEPTED_STORING_PERCENTAGE,
+            NUM_BYTES_PER_BLOCK_ID, NUM_BYTES_PER_POSITION, TIME_LIMIT, VERIFIABLE_RATIO,
+        },
     },
     communication::{
         client::send_msg,
         path_generator::random_path_generator,
         structs::{
-            Failure_Reason, Fairness, Notification, Time_Verification_Status, Verification_Status, NotifyNode,
+            Failure_Reason, Fairness, Notification, NotifyNode, Time_Verification_Status,
+            Verification_Status,
         },
     },
     Merkle_Tree::client_verify::get_root_hash,
@@ -42,11 +46,10 @@ pub struct Verifier {
     is_fair: bool,
     is_terminated: bool,
     shared_mapping_bytes: Arc<Mutex<HashMap<(u32, u32), u8>>>, // k: (block_id,position) v: (byte_value)
-    shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8;HASH_BYTES_LEN]>>>,
-    //hash_root: [u8; HASH_LENGTH],
+    shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8; HASH_BYTES_LEN]>>>,
     status: (Verification_Status, Fairness),
     counter: u8,
-    shared_start_time: Arc<Mutex<Instant>>, 
+    shared_start_time: Arc<Mutex<Instant>>,
 }
 
 impl Verifier {
@@ -56,8 +59,9 @@ impl Verifier {
         let receiver: Receiver<NotifyNode>;
         (sender, receiver) = mpsc::channel();
 
+        //initial seed for the incoming challenge
         let seed = rand::thread_rng().gen();
-        debug!("SEED INITIALLY == {}", seed);
+        debug!("seed initially == {}", seed);
 
         let mut verifier = Verifier::new(prover_address, sender.clone(), seed);
 
@@ -65,13 +69,9 @@ impl Verifier {
         verifier.main_handler(&receiver, &sender);
     }
 
-    fn new(
-        prover_address: String,
-        sender: Sender<NotifyNode>,
-        seed: u8,
-    ) -> Verifier {
+    fn new(prover_address: String, sender: Sender<NotifyNode>, seed: u8) -> Verifier {
         let mut stream_option: Result<TcpStream, std::io::Error>;
-        debug!("V: Arrived beginning new");
+        //Try connecting to prover until successful
         loop {
             stream_option = TcpStream::connect(prover_address.clone());
             match stream_option {
@@ -94,11 +94,12 @@ impl Verifier {
         let mapping_bytes: HashMap<(u32, u32), u8> = HashMap::new();
         let shared_mapping_bytes = Arc::new(Mutex::new(mapping_bytes));
 
-        let blocks_hashes: HashMap<u32, [u8;HASH_BYTES_LEN]> = HashMap::new();
-        let shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8; HASH_BYTES_LEN]>>> = Arc::new(Mutex::new(blocks_hashes));
+        let blocks_hashes: HashMap<u32, [u8; HASH_BYTES_LEN]> = HashMap::new();
+        let shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8; HASH_BYTES_LEN]>>> =
+            Arc::new(Mutex::new(blocks_hashes));
         let mut shared_start_time = Arc::new(Mutex::new(Instant::now()));
-        //let hash:[u8; HASH_LENGTH] = Default::default();
         let counter = 0;
+
         let mut this = Self {
             prover_address,
             seed,
@@ -110,12 +111,16 @@ impl Verifier {
             shared_blocks_hashes,
             status,
             counter,
-            shared_start_time
+            shared_start_time,
         };
         this.start_server(sender);
         this
     }
 
+    /* 
+    * Server implementation: the verifier keeps listening on the tcpstream endpoint. When a new message is detected, 
+    * it is handled separely in the handle_message function.
+    */
     fn start_server(&mut self, sender: Sender<NotifyNode>) {
         let mut stream_clone = self.stream.try_clone().unwrap();
         thread::spawn(move || {
@@ -127,6 +132,9 @@ impl Verifier {
         });
     }
 
+    /* 
+    * This is the job scheduler of the verifier.
+    */
     fn main_handler(&mut self, receiver: &Receiver<NotifyNode>, sender: &Sender<NotifyNode>) {
         let mut is_commitment_needed = true;
         let mut is_ready = false;
@@ -134,12 +142,12 @@ impl Verifier {
         let mut is_to_verify = true;
         let is_stopped = false;
         loop {
-            if is_commitment_needed{
+            if is_commitment_needed {
                 is_commitment_needed = false;
                 info!("Verifier asks the prover for commitment");
                 self.request_commitment();
             }
-            if is_to_challenge && is_ready {  //is_ready becomes true when I receive the hashes of the blocks
+            if is_to_challenge && is_ready {
                 is_to_challenge = false;
                 info!("Verifier prepares the challenge");
                 {
@@ -154,6 +162,7 @@ impl Verifier {
                             self.handle_commitment(&notify_node.buff);
                             is_ready = true;
                         }
+
                         Notification::Verification_Time => {
                             if is_to_verify {
                                 let stream_clone = self.stream.try_clone().unwrap();
@@ -161,7 +170,8 @@ impl Verifier {
                                 let mut proofs_clone = self.proofs.clone();
                                 self.counter += 1;
                                 let counter_clone = self.counter;
-                                let shared_start_time: Arc<Mutex<Instant>> = Arc::clone(&self.shared_start_time);
+                                let shared_start_time: Arc<Mutex<Instant>> =
+                                    Arc::clone(&self.shared_start_time);
                                 let time_curr = Instant::now();
                                 Some(thread::spawn(move || {
                                     if is_stopped == false {
@@ -191,7 +201,8 @@ impl Verifier {
                             info!("Handle_Inclusion_Proof started");
                             let sender_clone = sender.clone();
                             let shared_map = Arc::clone(&self.shared_mapping_bytes);
-                            let shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8; 32]>>> = Arc::clone(&self.shared_blocks_hashes);
+                            let shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8; 32]>>> =
+                                Arc::clone(&self.shared_blocks_hashes);
 
                             thread::spawn(move || {
                                 handle_inclusion_proof(
@@ -203,6 +214,9 @@ impl Verifier {
                             });
                         }
 
+                        //The Update notification can be used for multiple goals: 
+                        //one is updating the vector of proofs currently received by the prover
+                        //one is to terminate the protocol execution when all the proofs are received or a wrong proof was detected
                         Notification::Update => {
                             if !self.is_terminated {
                                 if notify_node.buff[0] == 0 {
@@ -253,11 +267,11 @@ impl Verifier {
                             let is_fair: Fairness;
                             //0-->Fair; 1-->Unfair(Time Reason); 2-->Unfair(Correctness Reason)
                             if notify_node.buff[0] == 0 {
-                                is_fair = Fairness::Fair
+                                is_fair = Fairness::Successful
                             } else if notify_node.buff[0] == 1 {
-                                is_fair = Fairness::Unfair(Failure_Reason::Timeout)
+                                is_fair = Fairness::Failure(Failure_Reason::Timeout)
                             } else {
-                                is_fair = Fairness::Unfair(Failure_Reason::Correctness)
+                                is_fair = Fairness::Failure(Failure_Reason::Incorrect)
                             }
                             self.status = (Verification_Status::Terminated, is_fair);
                             error!("\n***************************\nResult of the Challenge:{:?}\n***************************", self.status);
@@ -276,31 +290,13 @@ impl Verifier {
                 }
             }
         }
+        //When the protocol is terminated sleep some seconds to let other threads terminate as well
         thread::sleep(Duration::from_secs(5));
     }
 
-    pub fn challenge(&mut self) {
-        //tag is msg[0].           tag == 0 -> CHALLENGE    tag == 1 -> VERIFICATION    tag == 2 -> STOP (sending proofs)
-        let tag: u8 = 0;
-        let msg: [u8; 2] = [tag, self.seed];
-        //send challenge to prover for the execution
-        send_msg(&mut self.stream, &msg);
-        info!("Challenge sent to the prover...");
-    }
-
-    pub fn handle_commitment(&mut self, msg: &[u8]) {
-        let mut curr = 0;
-        let mut i = 0;
-        while curr < msg.len() {
-            {
-                self.shared_blocks_hashes.lock().unwrap().insert(i, msg[curr..curr+HASH_BYTES_LEN].try_into().unwrap());
-            }
-            curr += HASH_BYTES_LEN;
-            i+=1;
-        }
-        debug!("VERIFIER: BLOCKS MAP == {:?}", self.shared_blocks_hashes.lock().unwrap());
-    }
-
+    /* 
+    * The verifier requests the prover to commit to some raw data for the whole duration of the protocol execution.
+    */
     pub fn request_commitment(&mut self) {
         let tag: u8 = 7;
         let msg: [u8; 1] = [tag];
@@ -309,13 +305,43 @@ impl Verifier {
         info!("Request commitment to the prover...");
     }
 
-    //V: Iteration: 0, block_id = 3, position = 195687, value = 192
-    //P: Iteration: 0, block_id = 3, position = 195687, value = 192
-    //Verify some of the proofs: generate the seed correspondent to all the proofs.
-    //[0,*1,2,*3,4,5,*6,*7,8,*9]
-    //[1,2,3,4,5]
-    //update eg.  i = i + (1/3)*10
-    //update i = i + (% of samples I want to test) * (length of proof vector)
+    /* 
+    * The verifier collects the hashes of the roots for each given block. This is the commitment made by the prover.
+    */
+    pub fn handle_commitment(&mut self, msg: &[u8]) {
+        let mut curr = 0;
+        let mut i = 0;
+        while curr < msg.len() {
+            {
+                self.shared_blocks_hashes
+                    .lock()
+                    .unwrap()
+                    .insert(i, msg[curr..curr + HASH_BYTES_LEN].try_into().unwrap());
+            }
+            curr += HASH_BYTES_LEN;
+            i += 1;
+        }
+        debug!(
+            "Verifier commitment blocks map == {:?}",
+            self.shared_blocks_hashes.lock().unwrap()
+        );
+    }
+
+    /* 
+    * The verifier starts the challenge by sending a message to the prover, containing the initial seed.
+    */
+    pub fn challenge(&mut self) {
+        let tag: u8 = 0;
+        let msg: [u8; 2] = [tag, self.seed];
+        //send challenge to prover for the execution
+        send_msg(&mut self.stream, &msg);
+        info!("Challenge sent to the prover...");
+    }
+
+    /* 
+    * Start Correctness Verification: the random path generator is executed so that the verifier knows what proof to expect
+    * and therefore check whether the prover cheated. Moreover, the verifier will require Inclusion Proofs for some of the received proofs
+    */
     fn verify_correctness_proofs(&mut self, msg: &[u8]) -> bool {
         info!("Starting verify_correctness_proofs");
         let mut block_id: u32 = INITIAL_BLOCK_ID;
@@ -327,7 +353,6 @@ impl Verifier {
             block_ids_pos.push((block_id, position));
         }
 
-        // let _proofs_len = msg.len() as u32;
         let mut verfiable_ratio = VERIFIABLE_RATIO;
         if VERIFIABLE_RATIO == 0.0 {
             warn!("VERIFIABLE_RATIO was set to 0: it was reset to 0.5");
@@ -336,13 +361,16 @@ impl Verifier {
         let avg_step = (1.0 / verfiable_ratio).floor() as i32;
         let mut i: i32 = -avg_step;
         let mut random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
-        debug!("Average Step == {} + random Step == {}", avg_step, random_step);
+        debug!(
+            "Average Step == {} + random Step == {}",
+            avg_step, random_step
+        );
 
-        let mut verified_blocks_and_positions: Vec<u8> = vec![3];       //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
+        let mut verified_blocks_and_positions: Vec<u8> = vec![3]; //tag == 3 --> Send request to have a Merkle Tree proof for a specific u8 proof
         i = (i + ((avg_step + random_step) as i32)).abs();
         random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
 
-        info!(
+        debug!(
             "i == {}, Average Step == {} + random Step == {}",
             i, avg_step, random_step
         );
@@ -355,35 +383,16 @@ impl Verifier {
                     0,
                 );
             }
-            // debug!(
-            //     "*I am printing blockid == {} and position == {}",
-            //     block_id, position
-            // );
-            // warn!(
-            //     "V: Iteration: {}, block_id = {}, position = {}, value = {}",
-            //     i, block_ids_pos[i as usize].0, block_ids_pos[i as usize].1, msg[i as usize]
-            // );
-            // warn!("Indexxx == {}, msg before check == {:?}", i, msg);
-
-
-            //IMPORTANTE RIMOSSO: in realta' fare questa verifica dopo, nell'inclusion proof verification. 
-            //Qui i byte che salvi sono XORed. Quindi poi nell' incl proof, ricevi anche il data byte. 
-            //A questo punto: 
-            //   • per ogni XORed byte: crea il blocco CPoS corrispondente, seleziona il byte
-            //   • Fai XOR di data byte (dato dal prover) con byte di CPoS e verifica che ottieni esattamente il 
-
-            if !self.check_byte_value(
-                block_ids_pos[i as usize].0,
-                block_ids_pos[i as usize].1,
-                msg[i as usize],
-            ) {
-                warn!("Found incorrect byte value while checking");
-                return false;
+            {
+                self.shared_mapping_bytes
+                    .lock()
+                    .unwrap()
+                    .insert((block_ids_pos[i as usize].0, block_ids_pos[i as usize].1), msg[i as usize]);
+                debug!("byte_received ==== {}", msg[i as usize]);
             }
 
 
-
-            //send request Merkle Tree for each of the proof: send tag 3 followed by the indexes (block_ids), followed by the positions
+            //send request Inclusion Proof for each of the selected proofs: send tag 3 followed by the indexes (block_ids), followed by the positions
             //e.g. 3,block_id1,position1,blockid2,position2,block_id3,position3...
             debug!(
                 "V: iteration=={} and block_id == {} and pos == {}",
@@ -398,65 +407,19 @@ impl Verifier {
             random_step = rand::thread_rng().gen_range(-avg_step + 1..=avg_step - 1);
             k += 1;
         }
-        info!("Successful Correctness Verification");
 
         {
             let map = self.shared_mapping_bytes.lock().unwrap();
-            info!("Map completely created len == {:?}\n map == {:?}",map.len(),map);
+            debug!(
+                "Map completely created len == {:?}\n map == {:?}",
+                map.len(),
+                map
+            );
         }
         send_msg(&self.stream, &verified_blocks_and_positions);
         return true;
     }
 
-    //[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15]]
-    //blockid 10
-    //10 / 4  = 2
-    //8 / 4  = 2
-    //10 % 4 == 2
-    fn check_byte_value(&mut self, block_id: u32, pos_in_block: u32, byte_received: u8) -> bool {
-        // let block_group: Vec<[u64; GROUP_SIZE]> =
-        //     generate_block_group((block_id / GROUP_SIZE as u32).try_into().unwrap());
-
-        // let selected_arr: [u64; GROUP_SIZE] = block_group[(pos_in_block / 8) as usize]; //4 cells made of 8 bytes each
-
-        // let mut array_u8: [u8; 8 * GROUP_SIZE] = [0; 8 * GROUP_SIZE];
-
-        // for (i, &element) in selected_arr.iter().enumerate() {
-        //     let bytes = element.to_le_bytes();
-        //     array_u8[i * 8..(i + 1) * 8].copy_from_slice(&bytes);
-        // }
-
-        // let byte_value =
-        //     array_u8[(block_id % GROUP_SIZE as u32) as usize * 8 + (pos_in_block % 8) as usize];
-
-        // warn!(
-        //     "byte_value_real == {} and byte_received == {}",
-        //     byte_value, byte_received
-        // );
-        // debug!(
-        //     "I am printing blockid == {} and position == {}",
-        //     block_id, pos_in_block
-        // );
-        // {
-        //     self.shared_mapping_bytes
-        //         .lock()
-        //         .unwrap()
-        //         .insert((block_id, pos_in_block), byte_value);
-        // }
-        // return byte_value == byte_received;
-        // 
-
-
-        {
-            self.shared_mapping_bytes
-                .lock()
-                .unwrap()
-                .insert((block_id, pos_in_block), byte_received);
-            debug!("byte_received ==== {}",byte_received);
-        }
-
-        return true;
-    }
 }
 
 fn send_stop_msg(stream: &TcpStream) {
@@ -476,12 +439,14 @@ fn send_update_notification(new_proofs: &[u8], sender: &Sender<NotifyNode>) {
         .unwrap();
 }
 
+
+
 fn handle_verification(
     stream: &TcpStream,
     new_proofs: &[u8],
     proofs: &mut Vec<u8>,
     sender: &Sender<NotifyNode>,
-    counter: u8, 
+    counter: u8,
     shared_time_start: Arc<Mutex<Instant>>,
     time_curr: Instant,
 ) {
@@ -490,7 +455,6 @@ fn handle_verification(
     proofs.extend(new_proofs);
 
     send_update_notification(new_proofs, sender);
-
 
     match verify_time_challenge_bound(counter, proofs, shared_time_start, time_curr) {
         Time_Verification_Status::Correct => {
@@ -536,6 +500,9 @@ fn handle_verification(
     }
 }
 
+/*
+* Perform all the Correctness Verification steps for each received Inclusion Proof, as described in the thesis.
+*/
 fn handle_inclusion_proof(
     msg: &[u8],
     sender: &Sender<NotifyNode>,
@@ -564,46 +531,41 @@ fn handle_inclusion_proof(
     curr_indx += FRAGMENT_SIZE;
 
     let proof = from_bytes_to_proof(msg[curr_indx..].to_vec());
-    //After retrieving the elements: insert the byte to be proved in the self_fragment at the correct index. Then, using something similar to the method get_root_hash retrieve the hash of the root
 
     debug!("V handle_inclusion_proof: len(root_hash_bytes) == {}, block_id == {}, position_in_byte == {}", root_hash_bytes.len(), block_id, position);
 
-    // let mut buffer = vec![0; HASH_BYTES_LEN + NUM_BYTES_IN_BLOCK_GROUP as usize];
-    // read_hash_and_block_from_output_file(&self.shared_file, block_ids[indx], &mut buffer);
-    // let reconstructed_buffer = reconstruct_raw_data(0, &buffer);
+    let computed_xored_fragment = generate_xored_data(
+        block_id,
+        position,
+        shared_blocks_hashes.lock().unwrap()[&block_id],
+        self_fragment,
+        false,
+    );
 
-    // let group: Vec<[u64; 4]> = generate_PoS(block_id as u64, shared_blocks_hashes.lock().unwrap()[&block_id]);
-
-    
-    let computed_xored_fragment = generate_xored_data(block_id, position, shared_blocks_hashes.lock().unwrap()[&block_id], self_fragment, false);
-
-    let mut c_xored_byte = computed_xored_fragment[position as usize%FRAGMENT_SIZE as usize];
+    let mut c_xored_byte = computed_xored_fragment[position as usize % FRAGMENT_SIZE as usize];
 
     let raw_byte = self_fragment[(position % FRAGMENT_SIZE as u32) as usize];
     let mut xored_byte: u8 = 0;
     {
         let map = shared_map.lock().unwrap();
-        match map.get(&(block_id, position))
-        {
+        match map.get(&(block_id, position)) {
             Some(value) => {
-                //self_fragment[indx_byte_in_self_fragment as usize] = *value;
                 xored_byte = *value;
                 warn!("Check this inclusion proof with my innput value. block_id == {}, position {}, value {}, map.len =={}\nMap == {:?}", block_id, position, *value, map.len(), map);
             }
             None => {
-                error!("Do not check this inclusion proof with my innput value. block_id == {} and position {}, map.len =={} Map == {:?}", block_id, position, map.len(), map);
+                // error!("Do not check this inclusion proof with my innput value. block_id == {} and position {}, map.len =={} Map == {:?}", block_id, position, map.len(), map);
                 return;
             }
         };
     }
 
-    error!("V real xored_byte is {}\n while your computed xored byte is in {:?}\n while computed xored byte is {}", xored_byte, computed_xored_fragment, c_xored_byte);
+    // debug!("V real xored_byte is {}\n while your computed xored byte is in {:?}\n while computed xored byte is {}", xored_byte, computed_xored_fragment, c_xored_byte);
 
     let root_hash_computed =
         get_root_hash(&proof, (block_id, position), &shared_map, self_fragment);
     c_xored_byte = xored_byte;
     let mut correctness_flag = 1;
-
 
     let root_hash_computed_bytes = root_hash_computed.as_bytes();
     let block_hashes;
@@ -615,16 +577,13 @@ fn handle_inclusion_proof(
         );
     }
 
-    info!("Checking inclusion proof");
-    if root_hash_computed_bytes == &root_hash_bytes 
-            && root_hash_computed_bytes == &block_hashes[&block_id]
-            && c_xored_byte == xored_byte {
-        //convert to byte array the hash_retrieved. Then compare.
+    //Checking the three inclusion proof checks
+    if root_hash_computed_bytes == &root_hash_bytes
+        && root_hash_computed_bytes == &block_hashes[&block_id]
+        && c_xored_byte == xored_byte
+    {
         info!("Successful Inclusion proof");
         correctness_flag = 0;
-        {
-            debug!("map before == {:?}", shared_map.lock().unwrap());
-        }
         {
             shared_map.lock().unwrap().remove(&(block_id, position));
         }
@@ -641,41 +600,81 @@ fn handle_inclusion_proof(
         .unwrap();
 }
 
+/*
+* Perform the time Verification check.
+*/
 
-fn verify_time_challenge_bound(counter: u8, proofs: &Vec<u8>, shared_time_start: Arc<Mutex<Instant>>, time_curr: Instant) -> Time_Verification_Status {
+fn verify_time_challenge_bound(
+    counter: u8,
+    proofs: &Vec<u8>,
+    shared_time_start: Arc<Mutex<Instant>>,
+    time_curr: Instant,
+) -> Time_Verification_Status {
+    //Here are the average time to generate a bad proof or collect a good proof
+    let mut good_proof_count = 50;   
+    let mut bad_proof_count = 10000; 
 
-    let mut good_proof_count = 50;
-    let mut bad_proof_count = 10000;
-    if counter == 5{
-        return Time_Verification_Status::Correct;
-    }
     let time_start;
     {
         time_start = shared_time_start.lock().unwrap().to_owned();
     }
-    let delta_time = (time_curr-time_start).as_micros();
+    let delta_time = (time_curr - time_start).as_micros();
     error!("proofs len == {}", proofs.len());
     error!("delta time == {}", delta_time);
 
-    let (good_proof_count,bad_proof_count) = count_elements(proofs.len(), delta_time, GOOD_PROOF_AVG_TIMING, BAD_PROOF_AVG_TIMING);
-    let p = good_proof_count as f64 / (bad_proof_count+good_proof_count) as f64;
-    let std = (1.0/(proofs.len() as f64).sqrt())*(p*(1.0-p)).sqrt();
-    let inf =-2.576*std+p;
-    let sup = 2.576*std+p;
-    error!("inf == {} and sup == {}", inf,sup);
+    let (good_proof_count, bad_proof_count) = estimate_number_g_and_b(
+        proofs.len(),
+        delta_time,
+        GOOD_PROOF_AVG_TIMING,
+        BAD_PROOF_AVG_TIMING,
+    );
+    let p = good_proof_count as f64 / (bad_proof_count + good_proof_count) as f64;
+    let std = (1.0 / (proofs.len() as f64).sqrt()) * (p * (1.0 - p)).sqrt();
+    let inf = -2.576 * std + p;
+    let sup = 2.576 * std + p;
+    error!("inf == {} and sup == {}", inf, sup);
     error!("good_proof_count == {}", good_proof_count);
     error!("bad_proof_count == {}", bad_proof_count);
     error!("p == {}", p);
 
-    if sup-inf < 0.08 {
-        if (sup+inf)/2.0 >= LOWEST_ACCEPTED_STORING_PERCENTAGE as f64{
+    //We assume theta being 0.08
+    if sup - inf < 0.08 {
+        if (sup + inf) / 2.0 >= LOWEST_ACCEPTED_STORING_PERCENTAGE as f64 {
             error!("Stop Verification time Successful");
             return Time_Verification_Status::Correct;
         }
         error!("Stop Verification time FAILED");
-        return Time_Verification_Status::Incorrect;
     }
+    //add timeout
     return Time_Verification_Status::Insufficient_Proofs;
+}
+
+/*
+* Estimate the number of good and bad proofs knowing the amount of time passed. 
+*/
+fn estimate_number_g_and_b(n: usize, target: u128, good_elem: u128, bad_elem: u128) -> (u128, u128) {
+    let mut sum = 0;
+    let mut iter = 0;
+    let mut good_count = 0;
+    let mut bad_count = 0;
+    while iter < n {
+        if sum < target {
+            sum += bad_elem;
+            bad_count += 1;
+        } else {
+            sum += good_elem;
+            good_count += 1;
+        }
+        iter += 1;
+    }
+    //let's be more precise, maybe  overestimated the bad proofs number
+    if sum >= target + bad_count {
+        good_count += 1;
+        bad_count -= 1;
+        sum = sum + good_count - bad_count;
+    }
+
+    return (good_count, bad_count);
 }
 
 fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a [u8] {
@@ -695,8 +694,13 @@ fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a [u8] {
     }
 }
 
+
+/*
+* Generate a NotifyNode specific for each tag received. This NotifyNode will be received by the 
+* main_handler function that will take action according to the related message
+*/
 fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
-    if !msg.is_empty(){
+    if !msg.is_empty() {
         let tag = msg[0];
         if tag == 1 {
             debug!("Handle Verification of the proof");
@@ -738,29 +742,4 @@ fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
             error!("In verifier the tag is NOT 1: the tag is {}", tag)
         }
     }
-}
-
-fn count_elements(n: usize, target: u128, good_elem: u128, bad_elem: u128) -> (u128, u128) {
-    let mut sum = 0;
-    let mut iter = 0;
-    let mut good_count = 0;
-    let mut bad_count = 0;
-    while iter<n{
-        if sum < target {
-            sum += bad_elem;
-            bad_count +=1;
-        } else {
-            sum += good_elem;
-            good_count +=1;
-        }
-        iter+=1;
-    }
-    //let's be more precise, maybe  overestimated the bad proofs number
-    if sum >= target+bad_count{
-        good_count+=1;
-        bad_count-=1;
-        sum = sum + good_count - bad_count;
-    }
-    
-    return (good_count,bad_count);
 }

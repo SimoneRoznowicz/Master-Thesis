@@ -3,10 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{
-    block_generation::utils::Utils::FRAGMENT_SIZE,
-    Merkle_Tree::structs::*,
-};
+use crate::{block_generation::utils::Utils::FRAGMENT_SIZE, Merkle_Tree::structs::*};
 use log::{debug, error, info, warn};
 use talk::crypto::primitives::hash::{hash, Hash};
 
@@ -36,8 +33,15 @@ pub fn get_root_hash(
     //     };
     // }
 
-    info!("Verifier: value == {:?} self_fragment == {:?}", shared_map.lock().unwrap().get(&(block_id.clone(), position.clone())), self_fragment);
-    
+    info!(
+        "Verifier: value == {:?} self_fragment == {:?}",
+        shared_map
+            .lock()
+            .unwrap()
+            .get(&(block_id.clone(), position.clone())),
+        self_fragment
+    );
+
     let mut hash_final = blake3::hash(&self_fragment);
     //debug!("HASH self fragment == {:?}", hash_final.as_bytes());
     for sibling in siblings {

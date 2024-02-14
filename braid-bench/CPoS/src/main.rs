@@ -6,14 +6,14 @@ mod communication;
 extern crate env_logger;
 extern crate log;
 
-use std::fs::{OpenOptions, self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::{thread, env};
 use std::time::{Duration, Instant};
+use std::{env, thread};
 // use first_rust_project::Direction;
 
 use chrono::Local;
-use log::{info, LevelFilter, debug};
+use log::{debug, info, LevelFilter};
 
 //use crate::communication::server::start_server;
 use crate::block_generation::blockgen::GROUP_SIZE;
@@ -39,9 +39,7 @@ fn set_logger(level_filter: String) {
     } else {
         level = LevelFilter::Off;
     }
-    env_logger::builder()
-        .filter_level(level)
-        .init();
+    env_logger::builder().filter_level(level).init();
 }
 
 fn count_elements(target: u32, good_elem: u32, bad_elem: u32) -> (u32, u32) {
@@ -49,26 +47,25 @@ fn count_elements(target: u32, good_elem: u32, bad_elem: u32) -> (u32, u32) {
     let mut iter = 0;
     let mut good_count = 0;
     let mut bad_count = 0;
-    while iter<10{
+    while iter < 10 {
         if sum < target {
             sum += bad_elem;
-            bad_count +=1;
+            bad_count += 1;
         } else {
             sum += good_elem;
-            good_count +=1;
+            good_count += 1;
         }
-        iter+=1;
+        iter += 1;
     }
     //let's be more precise, maybe  overestimated the bad proofs number
-    if sum >= target+bad_count{
-        good_count+=1;
-        bad_count-=1;
+    if sum >= target + bad_count {
+        good_count += 1;
+        bad_count -= 1;
         sum = sum + good_count - bad_count;
     }
-    
-    return (good_count,bad_count);
-}
 
+    return (good_count, bad_count);
+}
 
 /*A block_group is made of a Vec<[u64,4]>: a Vector containing (2^16 = 65536 elements).
     So in total: there are 2^18 = 262144 u64 elements --> 2^21 = 2097152 u8 elements in a block_group
@@ -87,12 +84,11 @@ fn main() {
         }
         let target = 22007;
         let good_elem = 7;
-        let bad_elem = 20;    //140+21= 161
-        //120+28 = 148
-        let (good_elem, bad_elem) = count_elements(target,good_elem,bad_elem);
+        let bad_elem = 20; //140+21= 161
+                           //120+28 = 148
+        let (good_elem, bad_elem) = count_elements(target, good_elem, bad_elem);
         println!("Number of good_elem: {}", good_elem);
         println!("Number of bad_elem : {}", bad_elem);
-    
     } else {
         // let target = Box::new(File::create("log.txt").expect("Can't create file"));
 
@@ -118,8 +114,7 @@ fn main() {
         set_logger(args[1].to_lowercase());
         println!("arr == {}", args[1]);
 
-
-        let address_prover = format!("{}:{}", String::from("127.0.0.1"),String::from("3333"));
+        let address_prover = format!("{}:{}", String::from("127.0.0.1"), String::from("3333"));
 
         println!("Main");
         let addres_prover_clone = address_prover.clone();
@@ -132,10 +127,6 @@ fn main() {
         thread::sleep(Duration::from_secs(100));
     }
 }
-
-
-
-
 
 /*
     // let time_start;
