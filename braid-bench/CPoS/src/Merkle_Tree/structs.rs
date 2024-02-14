@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use talk::crypto::primitives::hash::Hash;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum Direction {

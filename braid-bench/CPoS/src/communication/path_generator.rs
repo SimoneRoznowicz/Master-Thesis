@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::debug;
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -7,7 +7,6 @@ use crate::block_generation::utils::Utils::{
     NUM_BLOCK_GROUPS_PER_UNIT, NUM_BYTES_IN_BLOCK, NUM_BYTES_IN_BLOCK_GROUP,
 };
 
-// // Try not to generate every time
 pub fn random_path_generator(seed: u8, iteration: u64) -> (u32, u32, u8) {
     let mut hasher_nxt_block = DefaultHasher::new();
     let mut hasher_nxt_pos = DefaultHasher::new();
@@ -25,10 +24,10 @@ pub fn random_path_generator(seed: u8, iteration: u64) -> (u32, u32, u8) {
     iteration.hash(&mut hasher_seed);
     let new_seed = hasher_seed.finish() % u8::MAX as u64;
 
-    // debug!("VERIFIER: new_id == {}", new_id);
-    // debug!("VERIFIER: new_p == {}", new_p);
-    // debug!("VERIFIER: iteration == {}", iteration);
-    // info!("VERIFIER: new_seed inside == {}", new_seed);
+    debug!("VERIFIER: new_id == {}", new_id);
+    debug!("VERIFIER: new_p == {}", new_p);
+    debug!("VERIFIER: iteration == {}", iteration);
+    debug!("VERIFIER: new_seed inside == {}", new_seed);
     return (
         new_id.try_into().unwrap(),
         new_p.try_into().unwrap(),

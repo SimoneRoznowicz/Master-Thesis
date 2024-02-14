@@ -16,8 +16,8 @@ use rand::seq::index;
 use crate::block_generation::blockgen::{
     FragmentGroup, BLOCK_BYTE_SIZE, GROUP_BYTE_SIZE, GROUP_SIZE,
 };
-use crate::block_generation::decoder::{decode_orig, reconstruct_raw_data};
-use crate::block_generation::encoder::{encode_orig, generate_xored_data};
+use crate::block_generation::decoder::{decode, reconstruct_raw_data};
+use crate::block_generation::encoder::{encode, generate_xored_data};
 use crate::block_generation::utils::Utils::{
     BATCH_SIZE, BUFFER_DATA_SIZE, FRAGMENT_SIZE, HASH_BYTES_LEN, INITIAL_BLOCK_ID,
     INITIAL_POSITION, NUM_BLOCK_GROUPS_PER_UNIT, NUM_BYTES_IN_BLOCK, NUM_BYTES_IN_BLOCK_GROUP,
@@ -94,7 +94,7 @@ impl Prover {
 
         let mut root_hashes = Vec::new();
 
-        match encode_orig(
+        match encode(
             input_file.try_clone().unwrap(),
             &output_file,
             &mut root_hashes,

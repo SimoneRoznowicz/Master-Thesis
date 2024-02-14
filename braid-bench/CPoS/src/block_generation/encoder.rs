@@ -1,20 +1,18 @@
-use std::fs::{File, OpenOptions, Permissions};
+use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::prelude::*;
 use std::io::{Read, SeekFrom};
 use std::mem::transmute;
 use std::time::Instant;
 
-use aes::cipher::{generic_array::GenericArray, BlockEncryptMut, KeyIvInit};
 use aes::Aes128;
 use blake3;
-use log::{debug, error, info};
-use rand::distributions::{Bernoulli, Distribution};
+use log::debug;
 
 use crate::block_generation::blockgen::{
-    block_gen, InitGroup, BLOCK_BYTE_SIZE, GROUP_BYTE_SIZE, GROUP_SIZE, INIT_SIZE, N,
+    block_gen, InitGroup, GROUP_BYTE_SIZE, GROUP_SIZE, INIT_SIZE, N
 };
-use crate::block_generation::utils::Utils::{NUM_BLOCK_GROUPS_PER_UNIT, NUM_BYTES_IN_BLOCK};
+use crate::block_generation::utils::Utils::NUM_BLOCK_GROUPS_PER_UNIT;
 use crate::PoS::prover::read_block_from_input_file;
 
 use super::blockgen::BlockGroup;
@@ -56,18 +54,11 @@ pub fn generate_commitment_hash(input_file: &mut File, block_id: u32) -> [u8; 32
     return root_hash;
 }
 
-pub fn encode_orig(
+pub fn encode(
     mut input_file: File,
     mut output_file: &File,
     mut root_hashes: &mut Vec<[u8; HASH_BYTES_LEN]>,
 ) -> io::Result<()> {
-    // let mut file3 = OpenOptions::new()
-    // .create(true)
-    // .append(true)
-    // .read(true)
-    // .write(true)
-    // .open("output.txt")
-    // .unwrap();
 
     let startup = Instant::now();
 
@@ -85,16 +76,11 @@ pub fn encode_orig(
     let size_bytes: [u8; 8] = unsafe { transmute(input_lenght.to_le()) };
     output_file.write_all(&size_bytes)?;
     let mut cc = 0;
-    // for b in size_bytes{
-    //     let bstr = b.to_string() + " ";
-    //     file3.write(bstr.as_bytes());
-    //     cc += 1;
-    // }
 
     for i in 0..block_count {
         root_hashes.push(generate_commitment_hash(&mut input_file, i as u32));
     }
-    info!("REAL GENERATED ROOT HASHES len {:?}", root_hashes.len());
+    debug!("Length of generated root hashes vector == {:?}", root_hashes.len());
 
     input_file.seek(SeekFrom::Start(0))?;
 
@@ -129,7 +115,7 @@ pub fn encode_orig(
         let group = block_gen(inits);
 
         let mut end_t = Instant::now();
-        info!("Time to Create a block: {}", (end_t - start_t).as_micros());
+        debug!("Time to Create a block: {}", (end_t - start_t).as_micros());
 
         // Compute input hash
         let mut output: Vec<u8> = Vec::with_capacity(32 + GROUP_BYTE_SIZE);
@@ -146,7 +132,7 @@ pub fn encode_orig(
                 data_bytes[j] = input[i * 8 + j];
             }
             let mut data = u64::from_le_bytes(data_bytes);
-            data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE]; //XOR of Encrypted(raw data) ^ PoS
+            data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE]; 
             data_bytes = unsafe { transmute(data.to_le()) };
             for j in 0..8 {
                 output.push(data_bytes[j]);
@@ -155,20 +141,6 @@ pub fn encode_orig(
 
         // Write to file
         output_file.write_all(&output)?;
-
-        // for b in output{
-        //     // if (cc == 64){
-        //     //     let ccstr = " * ";
-        //     //     file3.write(ccstr.as_bytes());
-        //     // }
-        //     if cc%10 == 0{
-        //         let new_line = "\n";
-        //         file3.write(new_line.as_bytes());
-        //     }
-        //     let bstr = b.to_string() + " ";
-        //     file3.write(bstr.as_bytes());
-        //     cc += 1;
-        // }
     }
 
     let ttotal = startup.elapsed();
@@ -176,6 +148,7 @@ pub fn encode_orig(
     println!("Encoded the file in {}ms", ms);
     Ok(())
 }
+
 
 pub fn generate_xored_data(
     block_id: u32,
@@ -187,7 +160,7 @@ pub fn generate_xored_data(
     // Compute input hash
     let group = generate_PoS(block_id as u64, root_hash);
     let mut input = vec![0u8; GROUP_BYTE_SIZE];
-    debug!("posssition =={}", position);
+    debug!("position =={}", position);
     let mut number_id_fragment = position / HASH_BYTES_LEN as u32;
     let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
 
@@ -196,10 +169,6 @@ pub fn generate_xored_data(
 
     let mut k = 0;
     for i in indx_start..indx_end {
-        debug!(
-            "k nel ciclo =={} mentre current value è {} e self_fragment[k] è {}",
-            k, input[i], self_fragment[k]
-        );
         input[i as usize] = self_fragment[k];
         k += 1;
     }
@@ -220,11 +189,7 @@ pub fn generate_xored_data(
     // Compute the output : XOR the input with the output of f
     let mut flag = false;
     let margin = (position as u32 / 8 as u32) as usize;
-    debug!("Just before printing...");
     for i in 0..(N * GROUP_SIZE) {
-        // if i == margin || i == margin+1 || i == margin+2{
-        //     flag =true;
-        // }
         let mut data_bytes = [0u8; 8];
         for j in 0..8 {
             data_bytes[j] = input[i * 8 + j];
@@ -240,150 +205,17 @@ pub fn generate_xored_data(
             );
         }
 
-        data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE]; //XOR of Encrypted(raw data) ^ PoS
+        data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE];
         data_bytes = unsafe { transmute(data.to_le()) };
-        if flag {
-            debug!(
-                "\n V AFTER: Index i*8 =={} data_bytes =={:?},\n data u64 == {}",
-                i * 8,
-                data_bytes,
-                data
-            );
-        }
 
         for j in 0..8 {
             output.push(data_bytes[j]);
         }
         flag = false;
     }
-
-    if flag == true {
-        let mut file3 = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .read(true)
-            .write(true)
-            .open("generated_almost_empty_out.txt")
-            .unwrap();
-
-        let mut cc = 0;
-        for b in 0..output.len() {
-            let bstr = output[b].to_string() + " ";
-            file3.write(bstr.as_bytes());
-        }
-    }
     return output[HASH_BYTES_LEN + indx_start as usize..HASH_BYTES_LEN + indx_end as usize]
         .to_vec();
 }
-
-// pub fn generate_xored_data_prover(block_id: u32, position: u32, root_hash: [u8;HASH_BYTES_LEN], self_fragment: [u8; FRAGMENT_SIZE], flag: bool, mut input: Vec<u8>) -> Vec<u8>{
-//     // Compute input hash
-//     let group = generate_PoS(block_id as u64, root_hash);
-
-//     //let input = vec![0u8; GROUP_BYTE_SIZE];
-//     debug!("posssition prover =={}", position);
-
-//     let mut number_id_fragment = position / HASH_BYTES_LEN as u32;
-//     let mut indx_start = (number_id_fragment) as usize * HASH_BYTES_LEN; //layer_len % HASH_BYTES_LEN;
-
-//     //let indx_start = position / FRAGMENT_SIZE as u32;
-//     let indx_end = indx_start+FRAGMENT_SIZE;
-
-//     let part_input = &input[indx_start as usize..indx_end as usize];
-//     debug!("Input before == {:?}", part_input);
-//     debug!("indx_start == {:?} and indx_end == {:?}", indx_start,indx_end);
-
-//     let mut k = 0;
-
-//     // //TO REMOVE
-//     // let mut x = indx_start/1000;
-//     // while x<(indx_start/100) {
-//     //     input[x] = 0;
-//     //     x+=1;
-//     // }
-//     // debug!("x == {}",x);
-
-//     // //END TO REMOVE
-
-//     for i in indx_start..indx_end {
-//         debug!("k nel ciclo =={} mentre current value è {} e self_fragment[k] è {}",k,input[i], self_fragment[k]);
-//         input[i as usize] = self_fragment[k];
-//         k+=1;
-//     }
-
-//     //TO REMOVE!!
-//     // input[50] = 0;
-//     // input[0] = 0;
-
-//     debug!("self_fragment == {:?}", self_fragment);
-//     let part_input = &input[indx_start as usize..indx_end as usize];
-//     debug!("Input == {:?}", part_input);
-
-//     let mut output: Vec<u8> = Vec::with_capacity(32 + GROUP_BYTE_SIZE);
-//     let input_hash = root_hash;
-
-//     for i in 0..32 {
-//         output.push(input_hash[i]);
-//     }
-
-//     // let key_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[0..16]);
-//     // let iv_bytes: &GenericArray<u8, aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UInt<aes::cipher::typenum::UTerm, aes::cipher::typenum::B1>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>, aes::cipher::typenum::B0>> = GenericArray::from_slice(&input_hash[16..32]);
-//     // for i in 0..16 {
-//     //     output.push(input_hash[0..16]);
-//     // }
-//     // for i in 0..16 {
-//     //     output.push(input_hash[i]);
-//     // }
-// //6, 223, 66, 203, 214, 21, 5, 66, 181, 190, 222, 239, 37, 148, 182, 90, 117, 81, 152, 118, 192, 97, 213, 41, 156, 18, 202, 141, 230, 100, 234, 81]
-
-//     // TODO : Encrypt input with AES using the hash.
-//     // let mut cipher = Aes128Cbc::new(&key_bytes, &iv_bytes);
-//     // for i in 0..(GROUP_BYTE_SIZE / 16) {
-//     //     let from = i*16;
-//     //     let to = from + 16;
-//     //     cipher.encrypt_block_mut(GenericArray::from_mut_slice(&mut input[from..to]));
-//     // }
-
-//     // Compute the output : XOR the input with the output of f
-//     let mut flag = false;
-//     let margin = (position as u32/8 as u32) as usize;
-//     for i in 0..(N*GROUP_SIZE) {
-//         if i*8 == indx_start || i*8 == indx_start+8 || i*8 == indx_start+16 || i*8 == indx_start+24 {
-//             flag =true;
-//         }
-//         let mut data_bytes = [0u8; 8];
-//         for j in 0..8 {
-//             data_bytes[j] = input[i*8 + j];
-//         }
-//         let mut data = u64::from_le_bytes(data_bytes);
-//         if flag {
-//             debug!("\n P Index i*8 =={} data_bytes =={:?},\n data u64 == {}",i*8, data_bytes,data);
-//         }
-//         data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE]; //XOR of Encrypted(raw data) ^ PoS
-//         data_bytes = unsafe { transmute(data.to_le()) };
-//         for j in 0..8 {
-//             output.push(data_bytes[j]);
-//         }
-//         flag = false;
-//     }
-
-//     if flag == true{
-//         let mut file3 = OpenOptions::new()
-//             .create(true)
-//             .append(true)
-//             .read(true)
-//             .write(true)
-//             .open("generated_almost_empty_out.txt")
-//             .unwrap();
-
-//         let mut cc = 0;
-//         for b in 0..output.len(){
-//             let bstr = output[b].to_string() + " ";
-//             file3.write(bstr.as_bytes());
-//         }
-//     }
-//     return output[HASH_BYTES_LEN+indx_start as usize..HASH_BYTES_LEN+indx_end as usize].to_vec();
-// }
 
 pub fn generate_PoS(block_id: u64, root_hash: [u8; HASH_BYTES_LEN]) -> BlockGroup {
     let pub_hash = blake3::hash(ID_PUBLIC_KEY);

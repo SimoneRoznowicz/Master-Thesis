@@ -1,8 +1,6 @@
 use std::vec::Vec;
 
-use bincode::Error;
-
-use log::{debug, error, info};
+use log::debug;
 
 pub const E: usize = 16;
 pub const D: usize = E + 1; // Amount of dependencies of each fragment
@@ -13,7 +11,6 @@ pub const ABSOLUTE_SPEEDUP_UPPERBOUND: usize = E * (1 << (E - 1)) * E + (N / 2) 
 const DESIRED_SPEEDUP_RATIO: usize = 2;
 const STEPS_LOWERBOUND: usize = DESIRED_SPEEDUP_RATIO * ABSOLUTE_SPEEDUP_UPPERBOUND;
 pub const SIZE: usize = (STEPS_LOWERBOUND + (E - 1)) / E;
-// pub const STEPS: usize = SIZE * E;
 
 pub type FRAGMENT = u64;
 pub const BLOCK_BYTE_SIZE: usize = N * 8;
@@ -21,7 +18,7 @@ pub const BLOCK_BYTE_SIZE: usize = N * 8;
 pub const GROUP_SIZE: usize = 4;                                
 pub const GROUP_BYTE_SIZE: usize = BLOCK_BYTE_SIZE * GROUP_SIZE;
 pub type FragmentGroup = [FRAGMENT; GROUP_SIZE];
-// pub type Block = [Fragment; N as usize];
+
 pub type BlockGroup = Vec<FragmentGroup>;
 
 pub const INIT_SIZE_EXP: usize = 2;
@@ -32,10 +29,10 @@ pub type InitGroup = [FragmentGroup; INIT_SIZE]; //array of 4 elements: each ele
 
 pub fn block_gen(inits: InitGroup) -> BlockGroup {
     if is_x86_feature_detected!("avx2") {
-        //info!("AVX2 activated");
+        debug!("AVX2 activated");
         unsafe { block_gen_avx2(inits) }
     } else {
-        //info!("AVX2 NOT activated");
+        debug!("AVX2 NOT activated");
         block_gen_inner(inits)
     }
 }
@@ -47,7 +44,6 @@ unsafe fn block_gen_avx2(inits: InitGroup) -> BlockGroup {
 
 #[inline(always)]
 fn block_gen_inner(inits: InitGroup) -> BlockGroup {
-    // let mut block: Block = [[0; FRAGMENTSIZE]; N as usize];
     let mut block: BlockGroup = vec![[0; GROUP_SIZE]; N as usize];
 
     let start = N - (SIZE % N);
