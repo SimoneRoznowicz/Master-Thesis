@@ -10,7 +10,7 @@ use blake3;
 use log::debug;
 
 use crate::block_generation::blockgen::{
-    block_gen, InitGroup, GROUP_BYTE_SIZE, GROUP_SIZE, INIT_SIZE, N
+    block_gen, InitGroup, GROUP_BYTE_SIZE, GROUP_SIZE, INIT_SIZE, N,
 };
 use crate::block_generation::utils::Utils::NUM_BLOCK_GROUPS_PER_UNIT;
 use crate::PoS::prover::read_block_from_input_file;
@@ -59,7 +59,6 @@ pub fn encode(
     mut output_file: &File,
     mut root_hashes: &mut Vec<[u8; HASH_BYTES_LEN]>,
 ) -> io::Result<()> {
-
     let startup = Instant::now();
 
     let pub_hash = blake3::hash(ID_PUBLIC_KEY);
@@ -80,7 +79,10 @@ pub fn encode(
     for i in 0..block_count {
         root_hashes.push(generate_commitment_hash(&mut input_file, i as u32));
     }
-    debug!("Length of generated root hashes vector == {:?}", root_hashes.len());
+    debug!(
+        "Length of generated root hashes vector == {:?}",
+        root_hashes.len()
+    );
 
     input_file.seek(SeekFrom::Start(0))?;
 
@@ -132,7 +134,7 @@ pub fn encode(
                 data_bytes[j] = input[i * 8 + j];
             }
             let mut data = u64::from_le_bytes(data_bytes);
-            data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE]; 
+            data = data ^ group[i / GROUP_SIZE][i % GROUP_SIZE];
             data_bytes = unsafe { transmute(data.to_le()) };
             for j in 0..8 {
                 output.push(data_bytes[j]);
@@ -148,7 +150,6 @@ pub fn encode(
     println!("Encoded the file in {}ms", ms);
     Ok(())
 }
-
 
 pub fn generate_xored_data(
     block_id: u32,

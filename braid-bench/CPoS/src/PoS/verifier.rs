@@ -53,6 +53,8 @@ pub struct Verifier {
 }
 
 impl Verifier {
+
+    //Entry point to execute a Verifier instance
     pub fn start(prover_address: String) {
         //channel to allow the verifier threads communicate with the main thread
         let sender: Sender<NotifyNode>;
@@ -117,10 +119,10 @@ impl Verifier {
         this
     }
 
-    /* 
-    * Server implementation: the verifier keeps listening on the tcpstream endpoint. When a new message is detected, 
-    * it is handled separely in the handle_message function.
-    */
+    /*
+     * Server implementation: the verifier keeps listening on the tcpstream endpoint. When a new message is detected,
+     * it is handled separely in the handle_message function.
+     */
     fn start_server(&mut self, sender: Sender<NotifyNode>) {
         let mut stream_clone = self.stream.try_clone().unwrap();
         thread::spawn(move || {
@@ -132,9 +134,9 @@ impl Verifier {
         });
     }
 
-    /* 
-    * This is the job scheduler of the verifier.
-    */
+    /*
+     * This is the job scheduler of the verifier.
+     */
     fn main_handler(&mut self, receiver: &Receiver<NotifyNode>, sender: &Sender<NotifyNode>) {
         let mut is_commitment_needed = true;
         let mut is_ready = false;
@@ -214,7 +216,7 @@ impl Verifier {
                             });
                         }
 
-                        //The Update notification can be used for multiple goals: 
+                        //The Update notification can be used for multiple goals:
                         //one is updating the vector of proofs currently received by the prover
                         //one is to terminate the protocol execution when all the proofs are received or a wrong proof was detected
                         Notification::Update => {
@@ -294,9 +296,9 @@ impl Verifier {
         thread::sleep(Duration::from_secs(5));
     }
 
-    /* 
-    * The verifier requests the prover to commit to some raw data for the whole duration of the protocol execution.
-    */
+    /*
+     * The verifier requests the prover to commit to some raw data for the whole duration of the protocol execution.
+     */
     pub fn request_commitment(&mut self) {
         let tag: u8 = 7;
         let msg: [u8; 1] = [tag];
@@ -305,9 +307,9 @@ impl Verifier {
         info!("Request commitment to the prover...");
     }
 
-    /* 
-    * The verifier collects the hashes of the roots for each given block. This is the commitment made by the prover.
-    */
+    /*
+     * The verifier collects the hashes of the roots for each given block. This is the commitment made by the prover.
+     */
     pub fn handle_commitment(&mut self, msg: &[u8]) {
         let mut curr = 0;
         let mut i = 0;
@@ -327,9 +329,9 @@ impl Verifier {
         );
     }
 
-    /* 
-    * The verifier starts the challenge by sending a message to the prover, containing the initial seed.
-    */
+    /*
+     * The verifier starts the challenge by sending a message to the prover, containing the initial seed.
+     */
     pub fn challenge(&mut self) {
         let tag: u8 = 0;
         let msg: [u8; 2] = [tag, self.seed];
@@ -338,10 +340,10 @@ impl Verifier {
         info!("Challenge sent to the prover...");
     }
 
-    /* 
-    * Start Correctness Verification: the random path generator is executed so that the verifier knows what proof to expect
-    * and therefore check whether the prover cheated. Moreover, the verifier will require Inclusion Proofs for some of the received proofs
-    */
+    /*
+     * Start Correctness Verification: the random path generator is executed so that the verifier knows what proof to expect
+     * and therefore check whether the prover cheated. Moreover, the verifier will require Inclusion Proofs for some of the received proofs
+     */
     fn verify_correctness_proofs(&mut self, msg: &[u8]) -> bool {
         info!("Starting verify_correctness_proofs");
         let mut block_id: u32 = INITIAL_BLOCK_ID;
@@ -384,13 +386,12 @@ impl Verifier {
                 );
             }
             {
-                self.shared_mapping_bytes
-                    .lock()
-                    .unwrap()
-                    .insert((block_ids_pos[i as usize].0, block_ids_pos[i as usize].1), msg[i as usize]);
+                self.shared_mapping_bytes.lock().unwrap().insert(
+                    (block_ids_pos[i as usize].0, block_ids_pos[i as usize].1),
+                    msg[i as usize],
+                );
                 debug!("byte_received ==== {}", msg[i as usize]);
             }
-
 
             //send request Inclusion Proof for each of the selected proofs: send tag 3 followed by the indexes (block_ids), followed by the positions
             //e.g. 3,block_id1,position1,blockid2,position2,block_id3,position3...
@@ -419,7 +420,6 @@ impl Verifier {
         send_msg(&self.stream, &verified_blocks_and_positions);
         return true;
     }
-
 }
 
 fn send_stop_msg(stream: &TcpStream) {
@@ -438,8 +438,6 @@ fn send_update_notification(new_proofs: &[u8], sender: &Sender<NotifyNode>) {
         })
         .unwrap();
 }
-
-
 
 fn handle_verification(
     stream: &TcpStream,
@@ -611,8 +609,8 @@ fn verify_time_challenge_bound(
     time_curr: Instant,
 ) -> Time_Verification_Status {
     //Here are the average time to generate a bad proof or collect a good proof
-    let mut good_proof_count = 50;   
-    let mut bad_proof_count = 10000; 
+    let mut good_proof_count = 50;
+    let mut bad_proof_count = 10000;
 
     let time_start;
     {
@@ -650,9 +648,14 @@ fn verify_time_challenge_bound(
 }
 
 /*
-* Estimate the number of good and bad proofs knowing the amount of time passed. 
+* Estimate the number of good and bad proofs knowing the amount of time passed.
 */
-fn estimate_number_g_and_b(n: usize, target: u128, good_elem: u128, bad_elem: u128) -> (u128, u128) {
+fn estimate_number_g_and_b(
+    n: usize,
+    target: u128,
+    good_elem: u128,
+    bad_elem: u128,
+) -> (u128, u128) {
     let mut sum = 0;
     let mut iter = 0;
     let mut good_count = 0;
@@ -694,9 +697,8 @@ fn handle_stream<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> &'a [u8] {
     }
 }
 
-
 /*
-* Generate a NotifyNode specific for each tag received. This NotifyNode will be received by the 
+* Generate a NotifyNode specific for each tag received. This NotifyNode will be received by the
 * main_handler function that will take action according to the related message
 */
 fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {

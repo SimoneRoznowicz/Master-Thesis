@@ -20,7 +20,6 @@ type Aes128Cbc = cbc::Decryptor<Aes128>;
 
 const ID_PUBLIC_KEY: &[u8] = b"727 is a funny number";
 
-
 pub fn decode(
     mut input_file: &File,
     mut output_file: &File,
@@ -95,9 +94,7 @@ pub fn decode(
     Ok(())
 }
 
-
 pub fn reconstruct_raw_data(block_id: u64, input_hash_and_xored_data: &Vec<u8>) -> Vec<u8> {
-
     let group = generate_PoS(
         block_id,
         input_hash_and_xored_data[0..HASH_BYTES_LEN]

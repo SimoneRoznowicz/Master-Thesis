@@ -27,6 +27,6 @@ pub mod Utils {
 
     pub const TIME_LIMIT: u128 = 10 * 1000000;
 
-    pub const GOOD_PROOF_AVG_TIMING: u128 = 50;    //on this laptop
-    pub const BAD_PROOF_AVG_TIMING: u128 = 11000;  //on this laptop
+    pub const GOOD_PROOF_AVG_TIMING: u128 = 50; //on this laptop
+    pub const BAD_PROOF_AVG_TIMING: u128 = 11000; //on this laptop
 }

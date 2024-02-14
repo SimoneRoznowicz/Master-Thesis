@@ -36,8 +36,7 @@ fn set_logger(level_filter: String) {
 }
 
 fn main() {
-
-    /* Uncomment the following if you want the logs to be saved in a file instead of a 
+    /* Uncomment the following if you want the logs to be saved in a file instead of a
     let target = Box::new(File::create("log.txt").expect("Can't create file"));
 
     env_logger::Builder::new()

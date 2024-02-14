@@ -4,8 +4,7 @@ use crate::{
 };
 
 // Helper function to convert the Proof struct into a vector of bytes
-pub fn from_proof_to_bytes<'a>(proof: Proof, vec: &mut Vec<u8>)
-{
+pub fn from_proof_to_bytes<'a>(proof: Proof, vec: &mut Vec<u8>) {
     //[tag, direction, 32_hash_bytes..., direction, 32_hash_bytes,...]
 
     for sibling in proof.get_siblings() {
