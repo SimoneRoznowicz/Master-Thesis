@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{block_generation::utils::Utils::FRAGMENT_SIZE, Merkle_Tree::structs::*};
-use log::info;
+use log::debug;
 
 pub fn get_root_hash(
     proof: &Proof,
@@ -17,7 +17,7 @@ pub fn get_root_hash(
 
     let siblings: &Vec<Sibling> = proof.get_siblings();
 
-    info!(
+    debug!(
         "Verifier: value == {:?} self_fragment == {:?}",
         shared_map
             .lock()

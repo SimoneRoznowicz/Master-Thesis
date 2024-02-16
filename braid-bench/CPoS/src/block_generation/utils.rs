@@ -19,13 +19,13 @@ pub mod Utils {
     pub const HASH_BYTES_LEN: usize = 32;
     pub const FRAGMENT_SIZE: usize = 32;
 
-    pub const BATCH_SIZE: usize = 100; //Indicates the batch size of proofs that should be sent to the verifier at every
+    pub const BATCH_SIZE: usize = 70; //Indicates the batch size of proofs that should be sent to the verifier at every
 
     // Lowest accepted percentage of blocks not stored by the prover. If the verifier detects that the prover
     // didn't store at least LOWEST_ACCEPTED_STORING_PERCENTAGE of blocks, the timeout is exceeded and the challenge is not passed.
     pub const LOWEST_ACCEPTED_STORING_PERCENTAGE: f64 = 0.9;
 
-    pub const TIME_LIMIT: u128 = 10 * 1000000;
+    pub const TIME_LIMIT: u128 = 2 * 1000000; //2 seconds
 
     pub const GOOD_PROOF_AVG_TIMING: u128 = 50; //on this laptop
     pub const BAD_PROOF_AVG_TIMING: u128 = 11000; //on this laptop

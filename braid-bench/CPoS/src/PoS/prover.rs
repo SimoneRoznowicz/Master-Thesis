@@ -95,6 +95,7 @@ impl Prover {
 
         let mut root_hashes = Vec::new();
 
+        let start_t = Instant::now();
         match encode(
             input_file.try_clone().unwrap(),
             &output_file,
@@ -107,6 +108,8 @@ impl Prover {
                 error!("Error while encoding: {:?}", e)
             }
         };
+        let end_t = Instant::now();
+        info!("Total Encoding time in millis == {:?}", (end_t-start_t).as_millis());
 
         // match decode(&output_file, &reconstructed_file, &root_hashes) {
         //     Ok(_) => {info!("Correctly decoded")},
@@ -121,20 +124,7 @@ impl Prover {
 
         input_file.seek(SeekFrom::Start(0));
 
-        let mut time_block_creation: Vec<u128> = Vec::new();
         let shared_file = Arc::new(Mutex::new(output_file));
-
-
-        //RECONSTRUCT RAW DATA
-        let mut buffer = vec![0; HASH_BYTES_LEN + NUM_BYTES_IN_BLOCK_GROUP as usize];
-        read_hash_and_block_from_output_file(&shared_file, 0, &mut buffer);
-        let reconstructed_buffer = reconstruct_raw_data(0, &buffer);
-
-        let sum_time_blocks_creation: u128 = time_block_creation.iter().sum();
-        debug!(
-            "Average time passed for 4 blocks creation is {:?}",
-            sum_time_blocks_creation as f64 / (1000.0 * time_block_creation.len() as f64)
-        );
 
         let stream: Option<TcpStream> = None;
         let mut this = Self {

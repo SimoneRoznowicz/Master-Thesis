@@ -236,7 +236,7 @@ impl Verifier {
                                             })
                                             .unwrap();
                                     } else {
-                                        error!("Correctly verified one proof ✅");
+                                        info!("Correctly verified one proof ✅");
                                         if self.shared_mapping_bytes.lock().unwrap().is_empty() {
                                             self.is_terminated = true;
                                             self.is_fair = true;
@@ -252,7 +252,7 @@ impl Verifier {
                                             {
                                                 let curr_map =
                                                     self.shared_mapping_bytes.lock().unwrap();
-                                                info!(
+                                                debug!(
                                                     "missing len == {}, missing map == {:?}",
                                                     curr_map.len(),
                                                     curr_map
@@ -276,7 +276,8 @@ impl Verifier {
                                 is_fair = Fairness::Failure(Failure_Reason::Incorrect)
                             }
                             self.status = (Verification_Status::Terminated, is_fair);
-                            error!("\n***************************\nResult of the Challenge:{:?}\n***************************", self.status);
+                            let total_time = (Instant::now() - *self.shared_start_time.lock().unwrap()).as_millis();
+                            error!("\n***************************\nResult of the Challenge:{:?}\ntotal time =={:?}\n***************************", self.status,total_time);
                             break;
                         }
                         _ => {
@@ -508,8 +509,7 @@ fn handle_inclusion_proof(
     shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8; 32]>>>,
 ) {
     let mut curr_indx = 0;
-    //SO THE MESSAGE WILL BE EVENTALLY: HASH,block_id,byte_position,self_fragment,proof
-    //debug!("V: Inside handle_inclusion_proof func msg == {:?}", msg);
+
     let mut root_hash_bytes: [u8; HASH_BYTES_LEN] = Default::default();
     root_hash_bytes.copy_from_slice(&msg[..HASH_BYTES_LEN]);
     curr_indx += HASH_BYTES_LEN;
@@ -549,7 +549,7 @@ fn handle_inclusion_proof(
         match map.get(&(block_id, position)) {
             Some(value) => {
                 xored_byte = *value;
-                warn!("Check this inclusion proof with my innput value. block_id == {}, position {}, value {}, map.len =={}\nMap == {:?}", block_id, position, *value, map.len(), map);
+                debug!("Check this inclusion proof with my innput value. block_id == {}, position {}, value {}, map.len =={}\nMap == {:?}", block_id, position, *value, map.len(), map);
             }
             None => {
                 // error!("Do not check this inclusion proof with my innput value. block_id == {} and position {}, map.len =={} Map == {:?}", block_id, position, map.len(), map);
@@ -558,7 +558,6 @@ fn handle_inclusion_proof(
         };
     }
 
-    // debug!("V real xored_byte is {}\n while your computed xored byte is in {:?}\n while computed xored byte is {}", xored_byte, computed_xored_fragment, c_xored_byte);
 
     let root_hash_computed =
         get_root_hash(&proof, (block_id, position), &shared_map, self_fragment);
@@ -601,7 +600,6 @@ fn handle_inclusion_proof(
 /*
 * Perform the time Verification check.
 */
-
 fn verify_time_challenge_bound(
     counter: u8,
     proofs: &Vec<u8>,
@@ -609,16 +607,14 @@ fn verify_time_challenge_bound(
     time_curr: Instant,
 ) -> Time_Verification_Status {
     //Here are the average time to generate a bad proof or collect a good proof
-    let mut good_proof_count = 50;
-    let mut bad_proof_count = 10000;
 
     let time_start;
     {
         time_start = shared_time_start.lock().unwrap().to_owned();
     }
     let delta_time = (time_curr - time_start).as_micros();
-    error!("proofs len == {}", proofs.len());
-    error!("delta time == {}", delta_time);
+    debug!("proofs len == {}", proofs.len());
+    debug!("delta time == {}", delta_time);
 
     let (good_proof_count, bad_proof_count) = estimate_number_g_and_b(
         proofs.len(),
@@ -630,20 +626,24 @@ fn verify_time_challenge_bound(
     let std = (1.0 / (proofs.len() as f64).sqrt()) * (p * (1.0 - p)).sqrt();
     let inf = -2.576 * std + p;
     let sup = 2.576 * std + p;
-    error!("inf == {} and sup == {}", inf, sup);
-    error!("good_proof_count == {}", good_proof_count);
-    error!("bad_proof_count == {}", bad_proof_count);
-    error!("p == {}", p);
+    info!("inf == {} and sup == {}", inf, sup);
+    debug!("good_proof_count == {}", good_proof_count);
+    debug!("bad_proof_count == {}", bad_proof_count);
+    debug!("p == {}", p);
 
     //We assume theta being 0.08
     if sup - inf < 0.08 {
         if (sup + inf) / 2.0 >= LOWEST_ACCEPTED_STORING_PERCENTAGE as f64 {
-            error!("Stop Verification time Successful");
+            info!("Stop Verification time Successful");
             return Time_Verification_Status::Correct;
         }
-        error!("Stop Verification time FAILED");
     }
-    //add timeout
+
+    if delta_time > TIME_LIMIT {
+        error!("Stop Verification time FAILED");
+        return Time_Verification_Status::Incorrect;
+    }
+
     return Time_Verification_Status::Insufficient_Proofs;
 }
 
@@ -706,7 +706,6 @@ fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
         let tag = msg[0];
         if tag == 1 {
             debug!("Handle Verification of the proof");
-            error!("handle message (removed tag) msg len == {}", msg.len());
             match sender.send(NotifyNode {
                 buff: msg[1..].to_vec(),
                 notification: Notification::Verification_Time,
