@@ -1,9 +1,0 @@
-{
-    "rust-analyzer.linkedProjects": [
-        ".\\CPoS\\Cargo.toml",
-        ".\\CPoS\\Cargo.toml",
-        ".\\CPoS\\Cargo.toml",
-        ".\\CPoS\\Cargo.toml"
-    ],
-    "rust-analyzer.showUnlinkedFileNotification": false
-}
