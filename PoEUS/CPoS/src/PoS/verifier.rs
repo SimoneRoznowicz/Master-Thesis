@@ -200,7 +200,7 @@ impl Verifier {
                         }
 
                         Notification::Handle_Inclusion_Proof => {
-                            info!("Handle_Inclusion_Proof started");
+                            debug!("Handle_Inclusion_Proof started");
                             let sender_clone = sender.clone();
                             let shared_map = Arc::clone(&self.shared_mapping_bytes);
                             let shared_blocks_hashes: Arc<Mutex<HashMap<u32, [u8; 32]>>> =
@@ -277,7 +277,7 @@ impl Verifier {
                             }
                             self.status = (Verification_Status::Terminated, is_fair);
                             let total_time = (Instant::now() - *self.shared_start_time.lock().unwrap()).as_millis();
-                            error!("\n***************************\nResult of the Challenge:{:?}\ntotal time =={:?}\n***************************", self.status,total_time);
+                            info!("\n***************************\nResult of the Challenge:{:?}\ntotal time =={:?}\n***************************", self.status,total_time);
                             break;
                         }
                         _ => {
@@ -718,7 +718,7 @@ fn handle_message(msg: &[u8], sender: Sender<NotifyNode>) {
                 }
             };
         } else if tag == 4 {
-            info!("Handle Verification of the Inclusion Proof");
+            debug!("Handle Verification of the Inclusion Proof");
             match sender.send(NotifyNode {
                 buff: msg[1..].to_vec(),
                 notification: Notification::Handle_Inclusion_Proof,

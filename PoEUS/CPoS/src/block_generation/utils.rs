@@ -13,7 +13,7 @@ pub mod Utils {
     pub static mut NUM_BLOCK_GROUPS_PER_UNIT: u64 = 0;
     pub static INITIAL_BLOCK_ID: u32 = 0;
     pub static INITIAL_POSITION: u32 = 0;
-    pub static VERIFIABLE_RATIO: f32 = 0.05;
+    pub static VERIFIABLE_RATIO: f32 = 0.01;
     pub const NUM_BYTES_PER_BLOCK_ID: usize = 4;
     pub const NUM_BYTES_PER_POSITION: usize = 4;
     pub const HASH_BYTES_LEN: usize = 32;

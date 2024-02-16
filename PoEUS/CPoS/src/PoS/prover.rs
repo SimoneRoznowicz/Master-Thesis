@@ -56,11 +56,8 @@ impl Prover {
     pub fn new(address: String, sender: Sender<NotifyNode>) -> Prover {
         debug!("beginning of new Prover");
         let mut files_to_remove = vec![
-            "test_main.bin",
-            "output.txt",
             "output.bin",
             "reconstructed.mp4",
-            "generated_almost_empty_out.txt",
         ];
         for file_path in files_to_remove {
             match fs::remove_file(file_path) {
@@ -587,7 +584,7 @@ pub fn read_byte_from_file(
     match file.read_exact(&mut buffer) {
         Ok(_) => {}
         Err(e) => {
-            error!("Error reading file == {:?}", e)
+            warn!("Error reading file == {:?}", e)
         }
     };
     let mut end_t = Instant::now();
@@ -612,7 +609,7 @@ pub fn read_hash_and_block_from_output_file(
     match file.read_exact(buffer) {
         Ok(_) => {}
         Err(e) => {
-            error!("Error reading file == {:?}", e)
+            warn!("Error reading file == {:?}", e)
         }
     };
 
@@ -627,7 +624,7 @@ pub fn read_block_from_input_file(file: &mut File, block_id: u32, buffer: &mut [
     match file.read_exact(buffer) {
         Ok(_) => {}
         Err(e) => {
-            error!("Error reading file == {:?}", e)
+            warn!("Error reading file == {:?}", e)
         }
     };
 
